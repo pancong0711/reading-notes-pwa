@@ -50,3 +50,7 @@
 
 - `manifest.webmanifest` 的 `icons` 为空——「添加到主屏幕」暂用默认图标（可补充 192/512 图标）。
 - 多终端之间**不自动同步**：靠「导出 → 传输 → 导入（差异对比合并）」显式搬运，这是刻意的 local-first 设计。
+
+## License
+
+[MIT](./LICENSE) © 2026 pancong0711 —— 代码可自由使用/修改/分发（保留版权声明即可）；`vendor/d3.min.js` 为 D3.js（BSD-3-Clause，版权归其作者）。
