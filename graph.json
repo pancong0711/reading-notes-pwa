@@ -1,0 +1,96 @@
+{
+  "version": 2,
+  "generated_at": "2026-08-24T12:18:15+08:00",
+  "label_version": "union",
+  "domains": [
+    {
+      "id": "optics",
+      "name": "光学",
+      "color": "#f59e0b",
+      "concept_count": 1,
+      "note_count": 0
+    },
+    {
+      "id": "mechanics",
+      "name": "力学",
+      "color": "#6366f1",
+      "concept_count": 1,
+      "note_count": 0
+    },
+    {
+      "id": "thermo",
+      "name": "热学",
+      "color": "#ef4444",
+      "concept_count": 1,
+      "note_count": 0
+    },
+    {
+      "id": "astro-meteo",
+      "name": "天文气象",
+      "color": "#0ea5e9",
+      "concept_count": 1,
+      "note_count": 0
+    },
+    {
+      "id": "cross-domain",
+      "name": "生活化学与杂项",
+      "color": "#f97316",
+      "concept_count": 1,
+      "note_count": 0
+    }
+  ],
+  "concepts": [
+    {
+      "id": "light_speed",
+      "name": "光速",
+      "domain": "optics",
+      "description": "示例概念——发布版不含个人数据，导入自己的数据包后图谱即呈现个人知识结构。",
+      "note_count": 0,
+      "related": []
+    },
+    {
+      "id": "momentum",
+      "name": "动量与角动量",
+      "domain": "mechanics",
+      "description": "示例概念。",
+      "note_count": 0,
+      "related": []
+    },
+    {
+      "id": "entropy",
+      "name": "熵与统计物理",
+      "domain": "thermo",
+      "description": "示例概念。",
+      "note_count": 0,
+      "related": []
+    },
+    {
+      "id": "planet",
+      "name": "行星与恒星",
+      "domain": "astro-meteo",
+      "description": "示例概念。",
+      "note_count": 0,
+      "related": []
+    },
+    {
+      "id": "physics_study",
+      "name": "物理学习",
+      "domain": "cross-domain",
+      "description": "示例概念。",
+      "note_count": 0,
+      "related": []
+    }
+  ],
+  "notes": [],
+  "edges": [],
+  "stats": {
+    "notes": 0,
+    "concepts": 5,
+    "domains": 5,
+    "edges": 0,
+    "orphan_notes": 0,
+    "user_tagged_notes": 0,
+    "user_concept_edges": 0,
+    "ai_concept_edges": 0
+  }
+}

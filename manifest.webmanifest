@@ -1,0 +1,13 @@
+{
+  "name": "读书笔记",
+  "short_name": "读书笔记",
+  "description": "读书笔记与日记 PWA：记录阅读、书写日记，支持离线使用",
+  "lang": "zh-CN",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#c9a96e",
+  "background_color": "#faf8f4",
+  "icons": []
+}

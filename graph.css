@@ -1,0 +1,549 @@
+/* ============================================================
+   graph.css —— 知识图谱页样式
+   与 styles.css 同一视觉基调：暖金点缀、浅米背景、衬线中文
+   ============================================================ */
+
+/* ---------- 布局：图谱区占满宽度 ---------- */
+
+.graph-container {
+  max-width: 1200px;
+}
+
+.graph-container .welcome {
+  padding-bottom: 8px;
+}
+
+.graph-container .welcome p {
+  margin: 4px 0 0;
+}
+
+/* ---------- 工具条：书过滤 + 搜索 ---------- */
+
+.graph-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 16px 0 14px;
+}
+
+.book-filter {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.book-filter-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.book-filter-btn:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.book-filter-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.graph-search {
+  flex: 1;
+  min-width: 200px;
+}
+
+.graph-search input {
+  width: 100%;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.graph-search input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(201, 169, 110, 0.18);
+}
+
+.graph-count {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* ---------- 图区 ---------- */
+
+.graph-stage {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 280px);
+  min-height: 460px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.graph-stage svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.graph-stage svg:active {
+  cursor: grabbing;
+}
+
+/* 边 */
+
+.graph-link {
+  stroke-linecap: round;
+}
+
+.graph-link-belongs_to {
+  stroke: #d8d2c4;
+  stroke-width: 1;
+}
+
+.graph-link-related {
+  stroke: #c9a96e;
+  opacity: 0.75;
+}
+
+.graph-link-cross_ref {
+  stroke: #c4bcaa;
+  stroke-width: 0.8;
+  stroke-dasharray: 4 3;
+  opacity: 0.65;
+}
+
+/* 节点 */
+
+.graph-node {
+  cursor: pointer;
+}
+
+.graph-node circle {
+  transition: filter 0.15s ease, stroke-width 0.15s ease;
+}
+
+.graph-node:hover circle {
+  stroke-width: 2.5;
+  filter: brightness(1.06);
+}
+
+.graph-node text.graph-label {
+  font-family: "Noto Serif CJK SC", "Source Han Serif SC", "Noto Serif SC",
+    "Songti SC", "SimSun", serif;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+}
+
+/* ---------- 图例（左上角叠加） ---------- */
+
+.graph-legend {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  max-width: 240px;
+}
+
+.graph-legend-title {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 1px;
+  margin-bottom: 2px;
+}
+
+.graph-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: 6px;
+  text-align: left;
+  width: 100%;
+  transition: background 0.15s ease;
+}
+
+.graph-legend-item:hover {
+  background: var(--accent-soft);
+}
+
+.graph-legend-item .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(59, 54, 48, 0.15);
+}
+
+.graph-legend-item .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-legend-item .count {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.graph-legend-item.off {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+/* ---------- 加载 / 空态 ---------- */
+
+.graph-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 15px;
+  background: var(--card);
+  z-index: 4;
+}
+
+.graph-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: var(--card);
+  z-index: 4;
+  margin: 0;
+  padding: 20px;
+}
+
+.graph-empty code {
+  background: var(--accent-soft);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.graph-loading[hidden],
+.graph-empty[hidden] {
+  display: none;
+}
+
+/* ---------- 侧边详情面板 ---------- */
+
+.graph-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 380px;
+  max-width: 92vw;
+  background: var(--card);
+  border-left: 1px solid var(--line);
+  box-shadow: -4px 0 20px rgba(59, 54, 48, 0.12);
+  z-index: 50;
+  transform: translateX(102%);
+  transition: transform 0.25s ease;
+  overflow-y: auto;
+}
+
+.graph-panel.open {
+  transform: translateX(0);
+}
+
+.graph-panel[hidden] {
+  display: block; /* 面板用 transform 控制显隐，hidden 仅占位 */
+}
+
+.graph-panel-close {
+  position: sticky;
+  top: 0;
+  float: right;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  margin: 10px 10px 0 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.graph-panel-close:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.graph-panel-body {
+  padding: 18px 22px 28px;
+}
+
+.graph-panel-head {
+  margin-bottom: 6px;
+}
+
+.graph-panel-kind {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.graph-panel-kind-note {
+  background: var(--accent);
+}
+
+.graph-panel-head h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  line-height: 1.4;
+}
+
+.graph-panel-sub {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.graph-panel-section {
+  margin-top: 18px;
+}
+
+.graph-panel-section h3 {
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: 1px;
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.graph-summary {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.graph-quote {
+  margin: 0 0 10px;
+  padding: 8px 14px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+/* 笔记列表项（概念面板内） */
+
+.graph-note-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.graph-note-item:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-hover);
+}
+
+.graph-note-item .t {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.graph-note-item .s {
+  display: block;
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  margin-bottom: 4px;
+}
+
+.graph-note-item .m {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 概念列表项（域面板内） */
+
+.graph-concept-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.graph-concept-item:hover {
+  border-color: var(--accent);
+}
+
+.graph-concept-item .t {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.graph-concept-item .m {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* 概念 chips（笔记面板内） */
+
+.graph-concept-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.graph-concept-chip {
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.graph-concept-chip:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.graph-concept-chip .tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.08);
+  vertical-align: 1px;
+}
+
+.graph-concept-chip em {
+  font-style: normal;
+  font-size: 11px;
+  opacity: 0.7;
+  margin-left: 4px;
+}
+
+.graph-concept-chip.linked {
+  font-weight: 700;
+}
+
+/* 概念标签常显（主视图） */
+.graph-node text.graph-label {
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* 图片缩略图 */
+
+.graph-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.graph-images img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+
+/* ---------- 响应式 ---------- */
+
+@media (max-width: 640px) {
+  .graph-stage {
+    height: calc(100vh - 320px);
+    min-height: 380px;
+  }
+
+  .graph-panel {
+    width: 100vw;
+    max-width: 100vw;
+  }
+
+  .graph-legend {
+    max-width: 180px;
+    padding: 8px 10px;
+  }
+}

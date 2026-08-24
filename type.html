@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>记录 · 读书笔记</title>
+  <link rel="stylesheet" href="styles.css?v=20260808">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html">读书笔记</a>
+      <nav class="nav" id="main-nav"></nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 类型标题 -->
+    <section class="welcome">
+      <h1 id="type-title">记录</h1>
+      <p id="type-hint"></p>
+    </section>
+
+    <!-- 工具栏 -->
+    <div class="toolbar">
+      <input id="search-input" type="search" placeholder="搜索标题/内容/读者注/AI注…">
+      <span class="count" id="record-count"></span>
+      <div class="toolbar-actions">
+        <button class="btn primary" id="new-btn" type="button">＋ 写一篇</button>
+        <button class="btn ghost" id="sync-btn" type="button">⇄ 同步 CLI</button>
+        <button class="btn ghost" id="manage-btn" type="button">管理类型</button>
+        <button class="btn ghost" id="tag-manage-btn" type="button">整理标签</button>
+        <button class="btn ghost" id="export-btn" type="button">导出 JSON</button>
+        <button class="btn ghost" id="import-btn" type="button">导入 JSON</button>
+        <input type="file" id="import-file" accept=".json,application/json" hidden>
+      </div>
+    </div>
+
+    <!-- 列表挂载点 -->
+    <div id="record-list"></div>
+
+    <!-- 空状态 -->
+    <div class="empty-state" id="empty-state" hidden>
+      <h2 id="empty-title">还没有记录</h2>
+      <p id="empty-hint">点「写一篇」随手记录。</p>
+      <button class="btn" id="empty-new-btn" type="button">写一篇</button>
+    </div>
+
+    <!-- 新建/编辑表单（统一编辑器，字段随类型动态增减） -->
+    <div id="editor" class="editor" hidden>
+      <h2 id="editor-title">写一篇</h2>
+
+      <div class="editor-photo">
+        <input type="file" id="photo-input" accept="image/*" capture="environment" hidden>
+        <button class="btn ghost" id="photo-btn" type="button">拍照 / 选图</button>
+        <img id="photo-preview" class="photo-preview" alt="照片预览" hidden>
+      </div>
+
+      <!-- 类型附加字段（book/pages/done/due 等，由 type.js 按 fields 动态生成） -->
+      <div id="type-fields"></div>
+
+      <label class="field">日期
+        <input id="f-date" type="date">
+      </label>
+
+      <label class="field">标题
+        <input id="f-title" type="text" placeholder="可留空，保存时自动生成">
+      </label>
+
+      <label class="field">标签
+        <input id="f-tags" type="text" placeholder="逗号分隔，如：光学, 生活篇">
+      </label>
+
+      <label class="field">内容
+        <textarea id="f-content" rows="3" placeholder="写下内容……"></textarea>
+      </label>
+
+      <label class="field">读者注
+        <textarea id="f-reader" rows="2" placeholder="自己的思考（AI 不代笔）"></textarea>
+      </label>
+
+      <div class="field">
+        <div class="field-head">
+          <span>AI注</span>
+          <button class="btn ghost small" id="ask-ai-btn" type="button">咨询 AI 并填入</button>
+        </div>
+        <textarea id="f-ai" rows="3" placeholder="与 AI 咨询的内容 / AI 的解答（可粘贴回复，或点「咨询 AI」）"></textarea>
+      </div>
+
+      <div class="field" id="concept-field" hidden>
+        <span>概念标签（知识图谱）</span>
+        <div id="concept-select" class="concept-select"></div>
+        <p class="field-hint">从 graph.json 的知识图谱概念中选择，保存为 source=user</p>
+      </div>
+
+      <div class="editor-actions">
+        <button class="btn primary" id="save-btn" type="button">保存</button>
+        <button class="btn ghost" id="cancel-btn" type="button">取消</button>
+      </div>
+    </div>
+
+    <!-- 标签整理面板 -->
+    <div id="tag-manage" class="type-manage" hidden>
+      <h2>整理标签</h2>
+      <p class="muted">重命名会把旧标签合并到新标签；删除会从所有本地记录移除。</p>
+      <div id="tag-list"></div>
+      <button class="btn ghost" id="tag-manage-close" type="button">关闭</button>
+    </div>
+
+    <!-- 类型管理面板 -->
+    <div id="type-manage" class="type-manage" hidden>
+      <h2>管理记录类型</h2>
+      <div id="type-list"></div>
+      <form id="type-add-form" class="type-add-form">
+        <h3>新增自定义类型</h3>
+        <label class="field">key（标识，小写字母/数字/连字符）
+          <input id="t-key" type="text" placeholder="如：idea">
+        </label>
+        <label class="field">显示名
+          <input id="t-label" type="text" placeholder="如：灵感">
+        </label>
+        <label class="field">图标（emoji）
+          <input id="t-icon" type="text" placeholder="如：💡">
+        </label>
+        <div class="field">
+          <span>附加字段</span>
+          <div id="t-fields"></div>
+        </div>
+        <button class="btn primary" type="submit">添加</button>
+        <button class="btn ghost" id="type-manage-close" type="button">关闭</button>
+      </form>
+    </div>
+
+    <!-- 导入对比面板 -->
+    <div id="import-panel" class="type-manage" hidden>
+      <h2>导入前对比</h2>
+      <p class="muted" id="import-diff-text">正在计算差异…</p>
+      <div id="import-strategy" class="import-strategy">
+        <label class="strategy"><input type="radio" name="import-strategy" value="merge" checked> 智能合并<span class="muted">（新增 + 包内较新覆盖，本端较新的保留）</span></label>
+        <label class="strategy"><input type="radio" name="import-strategy" value="new"> 仅新增<span class="muted">（不覆盖任何现有记录）</span></label>
+        <label class="strategy"><input type="radio" name="import-strategy" value="replace"> 完整替换<span class="muted">（以导入包为准清空重建）</span></label>
+      </div>
+      <p class="muted">导入前会自动下载一份当前数据的备份文件。</p>
+      <div class="strategy-actions">
+        <button class="btn primary" id="import-confirm" type="button">确认导入</button>
+        <button class="btn ghost" id="import-cancel" type="button">取消</button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">读书笔记 · 本地浏览</div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="file-warning.js"></script>
+  <script src="sw-register.js"></script>
+  <script src="types.js"></script>
+  <script type="module" src="type.js?v=20260808"></script>
+</body>
+</html>

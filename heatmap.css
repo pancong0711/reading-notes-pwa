@@ -1,0 +1,106 @@
+/* ============================================================
+   heatmap.css —— 阅读热力图组件样式（M4 · PWA 阅读端）
+   ------------------------------------------------------------
+   全部使用 hm- 前缀，避免与页面其他样式冲突；
+   颜色复用 styles.css 的设计令牌（--accent 等），
+   未加载 styles.css 时以括号内兜底值保持暖金配色。
+   ============================================================ */
+
+/* —— 组件容器与工具栏 —— */
+.hm-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+/* —— 视图切换按钮 —— */
+.hm-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--line, #e7e0d2);
+  border-radius: var(--radius, 8px);
+  background: var(--card, #ffffff);
+  color: var(--muted, #8b8274);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.hm-btn:hover {
+  color: var(--ink, #3b3630);
+  border-color: var(--accent, #c9a96e);
+}
+.hm-btn.active {
+  background: var(--accent, #c9a96e);
+  border-color: var(--accent, #c9a96e);
+  color: #fff;
+}
+
+/* —— 操作提示文案 —— */
+.hm-hint {
+  margin-left: auto;
+  color: var(--muted, #8b8274);
+  font-size: 12px;
+}
+
+/* —— 滚动容器：横向滚动条 + 拖拽平移 —— */
+.hm-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0 8px;
+  cursor: grab;
+  touch-action: pan-y; /* 保留页面纵向滚动，横向拖拽交给组件 */
+  -webkit-user-select: none;
+  user-select: none;
+}
+.hm-scroll.hm-dragging {
+  cursor: grabbing;
+}
+.hm-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.hm-scroll::-webkit-scrollbar-thumb {
+  background: #d9d2c2;
+  border-radius: 4px;
+}
+.hm-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* —— SVG 格子 —— */
+.hm-cell {
+  cursor: pointer;
+}
+
+/* —— 悬停提示：暗底白字圆角，跟随鼠标 —— */
+.hm-tooltip {
+  position: fixed;
+  z-index: 999;
+  display: none;
+  padding: 6px 12px;
+  background: rgba(43, 40, 34, 0.94); /* 暗底 */
+  color: #f7f3ea;                     /* 白字 */
+  border-radius: 6px;                 /* 圆角 */
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: nowrap;
+  pointer-events: none;               /* 不挡鼠标事件 */
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+.hm-tooltip.show {
+  display: block;
+}
+
+/* —— 小屏适配：按钮与提示更紧凑 —— */
+@media (max-width: 480px) {
+  .hm-btn {
+    padding: 5px 12px;
+    font-size: 13px;
+  }
+  .hm-hint {
+    font-size: 11px;
+  }
+}

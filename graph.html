@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>知识图谱 · 读书笔记</title>
+  <link rel="stylesheet" href="styles.css?v=20260815">
+  <link rel="stylesheet" href="graph.css?v=20260815">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html">读书笔记</a>
+      <nav class="nav" id="main-nav"></nav>
+    </div>
+  </header>
+
+  <main class="container graph-container">
+    <section class="welcome">
+      <h1>知识图谱</h1>
+      <p>领域 · 概念 · 笔记的关系网络。拖动节点、滚轮缩放、点击下钻。</p>
+    </section>
+
+    <!-- 工具条：书过滤 + 搜索 -->
+    <div class="graph-toolbar">
+      <div class="book-filter" id="book-filter" role="group" aria-label="按书过滤"></div>
+      <div class="graph-search">
+        <input type="search" id="search-input" placeholder="搜索笔记标题 / 摘要 / 标签…" autocomplete="off">
+      </div>
+      <span class="graph-count" id="graph-count"></span>
+    </div>
+
+    <!-- 图区：SVG + 图例叠加层 -->
+    <div class="graph-stage" id="graph-stage">
+      <svg id="graph-svg" role="img" aria-label="知识图谱力导向图"></svg>
+
+      <!-- 域颜色图例（左上角，可点击切换显隐） -->
+      <div class="graph-legend" id="graph-legend" hidden></div>
+
+      <!-- 加载中 / 数据缺失提示 -->
+      <div class="graph-loading" id="graph-loading">正在加载图谱数据…</div>
+      <div class="empty-state graph-empty" id="graph-empty" hidden>
+        <h2>还没有图谱数据</h2>
+        <p>请先运行 <code>reading-notes graph build</code> 并复制 <code>graph.json</code> 到 app/pwa/</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- 侧边详情面板 -->
+  <aside class="graph-panel" id="graph-panel" hidden>
+    <button class="graph-panel-close" id="panel-close" type="button" aria-label="关闭">×</button>
+    <div class="graph-panel-body" id="panel-body"></div>
+  </aside>
+
+  <footer class="site-footer">
+    <div class="container">读书笔记 · 本地浏览</div>
+  </footer>
+
+  <!-- 与现有页面一致：file-warning.js → sw-register.js → types.js（导航）→ graph.js（ES Module） -->
+  <script src="file-warning.js"></script>
+  <script src="sw-register.js"></script>
+  <script src="types.js"></script>
+  <script>
+    document.getElementById('main-nav').innerHTML = NoteTypes.renderNav('graph');
+  </script>
+  <!-- D3 本地化（vendor/d3.min.js），禁止 CDN 外链 -->
+  <script src="vendor/d3.min.js"></script>
+  <script type="module" src="graph.js?v=20260815b"></script>
+</body>
+</html>

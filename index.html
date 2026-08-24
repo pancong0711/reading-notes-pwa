@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>读书笔记 · 阅读足迹</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html">读书笔记</a>
+      <nav class="nav" id="main-nav"></nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="welcome">
+      <h1>阅读足迹</h1>
+      <p>每一本书、每一页笔记，都在这里留下足迹。</p>
+    </section>
+
+    <!-- 热力图挂载点：内容由 heatmap.js 渲染 -->
+    <section id="heatmap-mount" class="heatmap-mount"></section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">读书笔记 · 本地浏览</div>
+  </footer>
+
+  <!-- types.js 注册表 + 动态导航渲染（普通 script，file:// 可运行）；
+       activity.js 先注入真实活动数据，heatmap.js（ES Module）再渲染 -->
+  <script src="types.js"></script>
+  <script>
+    document.getElementById('main-nav').innerHTML = NoteTypes.renderNav('index');
+  </script>
+  <script src="activity.js"></script>
+  <script src="file-warning.js"></script>
+  <script src="sw-register.js"></script>
+  <script type="module" src="heatmap.js"></script>
+</body>
+</html>

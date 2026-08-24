@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>书架 · 读书笔记</title>
+  <link rel="stylesheet" href="styles.css?v=20260808">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html">读书笔记</a>
+      <nav class="nav" id="main-nav"></nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 书架视图：全部书的卡片列表 -->
+    <section id="book-list">
+      <div class="welcome">
+        <h1>书架</h1>
+        <p>每一本书的笔记按书聚合，点击卡片查看完整阅读轨迹。</p>
+      </div>
+
+      <div class="toolbar">
+        <span class="count" id="book-count"></span>
+      </div>
+
+      <!-- 书卡片挂载点 -->
+      <div id="book-cards"></div>
+
+      <!-- 空状态 -->
+      <div class="empty-state" id="book-empty" hidden>
+        <h2>书架还是空的</h2>
+        <p>写下第一篇带书名的笔记，书就会出现在这里。</p>
+      </div>
+    </section>
+
+    <!-- 书详情视图：书元信息 + 该书笔记分组列表 -->
+    <section id="book-detail" hidden>
+      <div class="welcome book-detail-head">
+        <button class="btn ghost" id="back-btn" type="button">← 返回书架</button>
+      </div>
+
+      <div class="book-detail">
+        <div class="book-detail-cover">
+          <img id="detail-cover" alt="封面" hidden>
+        </div>
+        <div class="book-detail-info">
+          <h1 id="detail-name"></h1>
+          <p class="book-detail-author" id="detail-author"></p>
+          <div class="book-detail-meta">
+            <span id="detail-status"></span>
+            <span id="detail-dates"></span>
+            <span id="detail-rating"></span>
+          </div>
+          <p class="book-detail-summary" id="detail-summary"></p>
+        </div>
+      </div>
+
+      <h2 class="book-notes-title">笔记</h2>
+      <!-- 笔记按 YYYY-MM 分组挂载点 -->
+      <div id="detail-notes"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">读书笔记 · 本地浏览</div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- 与 type.html 一致：file-warning.js → sw-register.js → types.js（导航）→ book.js（ES Module，依赖 data.js） -->
+  <script src="file-warning.js"></script>
+  <script src="sw-register.js"></script>
+  <script src="types.js"></script>
+  <script type="module" src="book.js"></script>
+</body>
+</html>
