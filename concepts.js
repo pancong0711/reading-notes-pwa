@@ -5,7 +5,7 @@
  *   - 列表：按域分组展示概念（含别名/关键词/关联/描述/引用数）
  *   - 新增 / 编辑 / 删除（删除保护：被笔记引用时需确认并清除引用）
  *   - 载入：从 graph.json / 上传 JSON（含 CLI concept list --json）
- *   - 导出：生成 concepts.yaml 文本，带回电脑端运行 graph build
+ *   - 导出：生成 concepts.yaml 文本，作为同步回电脑端的可选桥接（本机重算无需此步）
  *   - 本机重算：用 IndexedDB 笔记 + 工作副本目录在浏览器端重算 union 图谱，
  *     存 graph_local store（data.js），图谱页优先渲染；可下载 graph.json 回电脑端
  * 校验规则与 CLI concept_catalog.py 一致（data.js 数据层实现）。
@@ -313,7 +313,7 @@ function downloadExport() {
   a.download = 'concepts.yaml';
   a.click();
   URL.revokeObjectURL(a.href);
-  toast('已下载 concepts.yaml，拷贝回电脑端覆盖根目录文件后运行 graph build');
+  toast('已下载 concepts.yaml（仅回电脑端同步时需要；本机看新图请用「重新计算图谱」）');
 }
 
 /* ── 本机重算图谱（阶段二：无需电脑，浏览器端重算 union 图谱并存本机）── */

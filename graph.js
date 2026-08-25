@@ -562,7 +562,7 @@
         console.warn('[graph] 加载 graph.json 失败:', err);
         showError('还没有图谱数据');
         emptyEl.querySelector('p').innerHTML =
-          '请先运行 <code>reading-notes graph build</code> 并复制 <code>graph.json</code> 到 app/pwa/';
+          '可运行 <code>reading-notes graph build</code> 并复制 <code>graph.json</code> 到 app/pwa/；或在「概念管理」页载入概念目录后点「⚙️ 重新计算图谱」本机生成';
       });
   }
 

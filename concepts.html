@@ -17,7 +17,7 @@
   <main class="container">
     <section class="welcome">
       <h1>概念管理</h1>
-      <p>知识图谱 key（概念目录）的增删改。改动先保存到本机 IndexedDB，再「导出 concepts.yaml」带回电脑端运行 <code>graph build</code>。</p>
+      <p>知识图谱 key（概念目录）的增删改。改动保存到本机 IndexedDB 后，点「⚙️ 重新计算图谱」即可在手机端重建并查看新图；「导出 concepts.yaml」仅用于把改动同步回电脑端（可选）。</p>
     </section>
 
     <!-- 载入 / 导出 / 本机重算工具栏 -->
@@ -86,7 +86,7 @@
     <!-- 导出提示对话框 -->
     <div id="export-panel" class="type-manage" hidden>
       <h2>导出 concepts.yaml</h2>
-      <p class="muted">把下面的 YAML 拷贝回电脑端的 <code>concepts.yaml</code>（覆盖根目录文件），然后运行 <code>reading-notes graph build</code> 重建图谱。</p>
+      <p class="muted">把下面的 YAML 拷贝回电脑端的 <code>concepts.yaml</code>（覆盖根目录文件），再运行 <code>reading-notes graph build</code>。若只想在本机看新图，无需此步——直接点工具栏「⚙️ 重新计算图谱」即可。</p>
       <textarea id="export-text" rows="18" class="export-textarea" readonly></textarea>
       <div class="editor-actions">
         <button class="btn primary" id="export-download" type="button">下载为文件</button>
@@ -132,6 +132,6 @@
   <script>
     document.getElementById('main-nav').innerHTML = NoteTypes.renderNav('concepts');
   </script>
-  <script type="module" src="concepts.js?v=20260825"></script>
+  <script type="module" src="concepts.js?v=20260825b"></script>
 </body>
 </html>

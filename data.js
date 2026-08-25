@@ -526,7 +526,8 @@ export async function deleteNote(id) {
      · domain 须在 domains 表
      · 编辑字段 ∈ id|name|domain|aliases|keywords|related|description（列表类整段替换）
      · 删除默认保护：被笔记/日记引用时拒绝（需 force 并同步清除引用标注）
-   改动仅存本地 IndexedDB，写回方式为「导出 concepts.yaml」带回电脑端。
+   改动仅存本地 IndexedDB；生效路径有二——概念管理页「重新计算图谱」本机直接重算
+     （concepts.js + graph-build.js），或「导出 concepts.yaml」带回电脑端跑 CLI（跨终端同步用）。
    ══════════════════════════════════════════════════════════ */
 
 /* 概念目录工作副本（单条记录 id='main'） */
