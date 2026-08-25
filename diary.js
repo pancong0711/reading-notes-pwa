@@ -1,5 +1,5 @@
 /* diary.js —— 日记模块
- * 数据层：直接使用 IndexedDB 对象仓库 notes（库名 reading-notes，版本 2），
+ * 数据层：直接使用 IndexedDB 对象仓库 notes（库名 reading-notes，当前版本 5），
  * 日记条目 type 固定为 "diary"，与读书笔记（type: note 等）共存但互不干扰。
  * 同一天可写多篇：每篇独立 id，不再按日期覆盖（与 CLI 端「同日追加」行为一致）。
  */
@@ -7,7 +7,7 @@
   'use strict';
 
   var DB_NAME = 'reading-notes';   // 数据库名，与数据层约定一致
-  var DB_VERSION = 4;              // 与 data.js 保持一致（schema 统一：v4 增加 concept_catalog store）
+  var DB_VERSION = 5;              // 与 data.js 保持一致（schema 统一：v4 concept_catalog、v5 graph_local store）
   var STORE = 'notes';             // 对象仓库名
   var TYPE_DIARY = 'diary';        // 日记类型标记
 
@@ -40,6 +40,12 @@
         // concept_catalog 仓库（PWA 概念管理工作副本）：与 data.js 保持同一 schema
         if (!db.objectStoreNames.contains('concept_catalog')) {
           db.createObjectStore('concept_catalog', { keyPath: 'id' });
+        }
+        // graph_local 仓库（v5 本机重算 union 图谱存档）：与 data.js 同 schema（keyPath: id）。
+        // 两处各自 openDB 同名库，升版本必须两侧同步补建同一批 store——
+        // 否则先开库的一方把库版本顶上去后，后开的一方不再触发 onupgradeneeded 而缺 store
+        if (!db.objectStoreNames.contains('graph_local')) {
+          db.createObjectStore('graph_local', { keyPath: 'id' });
         }
       };
       req.onsuccess = function () { resolve(req.result); };

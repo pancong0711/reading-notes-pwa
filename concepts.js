@@ -6,6 +6,8 @@
  *   - 新增 / 编辑 / 删除（删除保护：被笔记引用时需确认并清除引用）
  *   - 载入：从 graph.json / 上传 JSON（含 CLI concept list --json）
  *   - 导出：生成 concepts.yaml 文本，带回电脑端运行 graph build
+ *   - 本机重算：用 IndexedDB 笔记 + 工作副本目录在浏览器端重算 union 图谱，
+ *     存 graph_local store（data.js），图谱页优先渲染；可下载 graph.json 回电脑端
  * 校验规则与 CLI concept_catalog.py 一致（data.js 数据层实现）。
  */
 import {
@@ -21,7 +23,12 @@ import {
   importConceptCatalog,
   importConceptCatalogFromGraph,
   exportConceptCatalogYaml,
+  getAllNotes,
+  saveLocalGraph,
+  getLocalGraph,
+  clearLocalGraph,
 } from './data.js';
+import { buildUnionGraph } from './graph-build.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -30,6 +37,8 @@ const els = {
   loadGraphBtn: $('load-graph-btn'),
   loadFileBtn: $('load-file-btn'),
   loadFile: $('load-file'),
+  rebuildBtn: $('rebuild-btn'),
+  localStatus: $('local-graph-status'),
   exportBtn: $('export-btn'),
   newBtn: $('new-btn'),
   list: $('concept-list'),
@@ -49,6 +58,11 @@ const els = {
   exportText: $('export-text'),
   exportDownload: $('export-download'),
   exportClose: $('export-close'),
+  rebuildPanel: $('rebuild-panel'),
+  rebuildStats: $('rebuild-stats'),
+  rebuildWarnings: $('rebuild-warnings'),
+  rebuildDownload: $('rebuild-download'),
+  rebuildClose: $('rebuild-close'),
   deletePanel: $('delete-panel'),
   deleteInfo: $('delete-info'),
   deleteRefs: $('delete-refs'),
@@ -62,6 +76,7 @@ let domainsCache = [];
 let conceptsCache = [];
 let editingId = null;          // null = 新增
 let pendingDelete = null;      // {id, refs}
+let lastRebuild = null;        // 最近一次本机重算的存档记录 {id, graph, builtAt, source}
 
 /* ── 工具 ── */
 
@@ -301,6 +316,101 @@ function downloadExport() {
   toast('已下载 concepts.yaml，拷贝回电脑端覆盖根目录文件后运行 graph build');
 }
 
+/* ── 本机重算图谱（阶段二：无需电脑，浏览器端重算 union 图谱并存本机）── */
+
+/** ISO 时间 → 本地可读「YYYY-MM-DD HH:MM」；解析失败原样返回 */
+function fmtLocalTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  const p = (x) => String(x).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/**
+ * 重算入口：概念目录工作副本 + IndexedDB 书籍笔记（type='note'，日记/日志/备忘
+ * 不进图，同 CLI 口径）→ buildUnionGraph → 存 graph_local（图谱页优先渲染）。
+ * 整个流程 try/catch：失败仅 toast，不影响页面已有状态与静态数据。
+ */
+async function rebuildGraph() {
+  try {
+    const catalog = await getConceptCatalog();
+    if (!catalog || !(catalog.concepts || []).length) {
+      toast('请先载入概念目录（从 graph.json 载入或上传 JSON）', 3600);
+      return;
+    }
+    const notes = await getAllNotes('note');
+    const result = buildUnionGraph({
+      domains: catalog.domains || [],
+      concepts: catalog.concepts || [],
+      notes,
+    });
+    lastRebuild = await saveLocalGraph(result);
+    renderRebuildPanel(lastRebuild);
+    await refreshLocalGraphStatus();
+    toast(`本机图谱已构建：${result.stats.notes} 笔记 · ${result.stats.edges} 边`);
+  } catch (err) {
+    toast(`重算失败：${err.message}`, 4200);
+  }
+}
+
+/** 结果面板：统计行（口径同 CLI graph build）＋ warnings 逐条降级提示 */
+function renderRebuildPanel(record) {
+  const s = (record.graph && record.graph.stats) || {};
+  const lines = [
+    `✅ 图谱已构建（本机重算 @${fmtLocalTime(record.builtAt)}）`,
+    `📝 笔记 ${s.notes ?? 0} ｜ 💡 概念 ${s.concepts ?? 0} ｜ 🗂️ 域 ${s.domains ?? 0}`
+      + ` ｜ 🔗 边 ${s.edges ?? 0} ｜ 🕳️ 孤立笔记 ${s.orphan_notes ?? 0}`,
+    `🏷️ 用户概念标签笔记 ${s.user_tagged_notes ?? 0} 篇`
+      + ` ｜ 用户驱动边 ${s.user_concept_edges ?? 0} ｜ AI 驱动边 ${s.ai_concept_edges ?? 0}`,
+  ];
+  els.rebuildStats.innerHTML = lines.map((t) => esc(t)).join('<br>');
+
+  // 目录缺 aliases/keywords 时自动命中退化（如从 graph.json 载入的目录），逐条提示
+  const warns = record.graph && Array.isArray(record.graph.warnings) ? record.graph.warnings : [];
+  els.rebuildWarnings.innerHTML = warns.map((w) => `<li>⚠️ ${esc(w)}</li>`).join('');
+  els.rebuildWarnings.hidden = warns.length === 0;
+
+  els.rebuildPanel.hidden = false;
+  els.rebuildPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/** 下载重算结果：剔除顶层 warnings 键，schema 与 CLI 产物 graph.json 完全一致 */
+function downloadRebuiltGraph() {
+  if (!lastRebuild || !lastRebuild.graph) {
+    toast('还没有本机重算结果，请先点「重新计算图谱」', 3600);
+    return;
+  }
+  const { warnings, ...schema } = lastRebuild.graph;
+  const blob = new Blob([JSON.stringify(schema, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'graph.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('已下载 graph.json，可选带回电脑端覆盖 app/pwa/graph.json');
+}
+
+/** 工具栏下方状态行：有存档显示「🧠 本机图谱：…」＋清除入口；无则提示尚无结果 */
+async function refreshLocalGraphStatus() {
+  let rec = null;
+  try {
+    rec = await getLocalGraph();
+  } catch (err) {
+    console.warn('[concepts] 读取本机图谱失败:', err);
+  }
+  if (!rec || !rec.graph || !Array.isArray(rec.graph.notes)) {
+    els.localStatus.textContent = '尚无本机重算结果';
+    els.localStatus.hidden = false;
+    return;
+  }
+  const s = rec.graph.stats || {};
+  els.localStatus.innerHTML =
+    `🧠 本机图谱：${esc(String(s.notes ?? rec.graph.notes.length))} 笔记 · `
+    + `${esc(String(s.edges ?? 0))} 边 @${esc(fmtLocalTime(rec.builtAt))} `
+    + '<button class="btn ghost" data-act="clear-local-graph" type="button">清除</button>';
+}
+
 /* ── 数据载入 ── */
 
 async function loadCatalog() {
@@ -327,6 +437,24 @@ els.exportBtn.addEventListener('click', openExport);
 els.exportClose.addEventListener('click', closeExport);
 els.exportDownload.addEventListener('click', downloadExport);
 
+els.rebuildBtn.addEventListener('click', rebuildGraph);
+els.rebuildClose.addEventListener('click', () => { els.rebuildPanel.hidden = true; });
+els.rebuildDownload.addEventListener('click', downloadRebuiltGraph);
+
+// 状态行「清除」按钮：删除 graph_local 存档并刷新状态行（面板一并收起）
+els.localStatus.addEventListener('click', async (event) => {
+  if (!event.target.closest('[data-act="clear-local-graph"]')) return;
+  try {
+    await clearLocalGraph();
+    lastRebuild = null;
+    els.rebuildPanel.hidden = true;
+    await refreshLocalGraphStatus();
+    toast('已清除本机重算结果，图谱页回退 CLI 产物');
+  } catch (err) {
+    toast(`清除失败：${err.message}`, 4200);
+  }
+});
+
 els.deleteCancel.addEventListener('click', closeDeletePanel);
 els.deleteConfirm.addEventListener('click', confirmDelete);
 
@@ -348,4 +476,5 @@ els.list.addEventListener('click', (event) => {
 (async function init() {
   document.title = '概念管理 · 读书笔记';
   await loadCatalog();
+  await refreshLocalGraphStatus();
 })();

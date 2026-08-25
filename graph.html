@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>知识图谱 · 读书笔记</title>
   <link rel="stylesheet" href="styles.css?v=20260815">
-  <link rel="stylesheet" href="graph.css?v=20260815">
+  <link rel="stylesheet" href="graph.css?v=20260825">
 </head>
 <body>
   <header class="site-header">
@@ -28,6 +28,9 @@
         <input type="search" id="search-input" placeholder="搜索笔记标题 / 摘要 / 标签…" autocomplete="off">
       </div>
       <span class="graph-count" id="graph-count"></span>
+      <!-- 数据来源徽标：🧠 本机重算 / 📦 CLI 产物（graph.js 填充） -->
+      <span class="graph-source-badge" id="graph-source-badge" hidden></span>
+      <button type="button" class="graph-source-clear" id="clear-local-btn" hidden>清空本机结果</button>
     </div>
 
     <!-- 图区：SVG + 图例叠加层 -->
@@ -65,6 +68,6 @@
   </script>
   <!-- D3 本地化（vendor/d3.min.js），禁止 CDN 外链 -->
   <script src="vendor/d3.min.js"></script>
-  <script type="module" src="graph.js?v=20260815b"></script>
+  <script type="module" src="graph.js?v=20260825"></script>
 </body>
 </html>

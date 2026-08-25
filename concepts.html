@@ -20,17 +20,21 @@
       <p>知识图谱 key（概念目录）的增删改。改动先保存到本机 IndexedDB，再「导出 concepts.yaml」带回电脑端运行 <code>graph build</code>。</p>
     </section>
 
-    <!-- 载入 / 导出工具栏 -->
+    <!-- 载入 / 导出 / 本机重算工具栏 -->
     <div class="toolbar">
       <span class="count" id="catalog-count"></span>
       <div class="toolbar-actions">
         <button class="btn ghost" id="load-graph-btn" type="button">从 graph.json 载入</button>
         <button class="btn ghost" id="load-file-btn" type="button">上传 JSON 载入</button>
         <input type="file" id="load-file" accept=".json,application/json" hidden>
+        <button class="btn ghost" id="rebuild-btn" type="button">⚙️ 重新计算图谱</button>
         <button class="btn ghost" id="export-btn" type="button">导出 concepts.yaml</button>
         <button class="btn primary" id="new-btn" type="button">＋ 新增概念</button>
       </div>
     </div>
+
+    <!-- 本机图谱状态行（concepts.js 填充：有本机重算结果显示摘要＋清除入口，无则提示） -->
+    <p class="muted local-graph-status" id="local-graph-status" hidden></p>
 
     <!-- 概念列表（按域分组）挂载点 -->
     <div id="concept-list"></div>
@@ -90,6 +94,19 @@
       </div>
     </div>
 
+    <!-- 本机重算结果面板（点「重新计算图谱」后展示统计 / warnings / 下载） -->
+    <div id="rebuild-panel" class="type-manage" hidden>
+      <h2>本机重算图谱</h2>
+      <p class="muted">用本机 IndexedDB 的书籍笔记＋概念目录工作副本在浏览器端重算 union 图谱（口径与 CLI <code>graph build</code> 一致，日记/日志/备忘不进图）。结果存本机 IndexedDB，图谱页优先渲染。</p>
+      <p id="rebuild-stats" class="rebuild-stats"></p>
+      <ul id="rebuild-warnings" class="muted rebuild-warnings" hidden></ul>
+      <p class="muted">可选：「下载 graph.json」带回电脑端覆盖 <code>app/pwa/graph.json</code>（已剔除 warnings，schema 与 CLI 产物一致）。</p>
+      <div class="editor-actions">
+        <button class="btn primary" id="rebuild-download" type="button">下载 graph.json</button>
+        <button class="btn ghost" id="rebuild-close" type="button">关闭</button>
+      </div>
+    </div>
+
     <!-- 删除确认对话框 -->
     <div id="delete-panel" class="type-manage" hidden>
       <h2>删除概念</h2>
@@ -115,6 +132,6 @@
   <script>
     document.getElementById('main-nav').innerHTML = NoteTypes.renderNav('concepts');
   </script>
-  <script type="module" src="concepts.js?v=20260824"></script>
+  <script type="module" src="concepts.js?v=20260825"></script>
 </body>
 </html>

@@ -19,10 +19,17 @@
   var panelClose = document.getElementById('panel-close');
   var searchInput = document.getElementById('search-input');
   var bookFilterEl = document.getElementById('book-filter');
+  var sourceBadgeEl = document.getElementById('graph-source-badge');
+  var clearLocalBtn = document.getElementById('clear-local-btn');
 
   var rawData = null;
   var svg, viewport, linkG, nodeG, sim;
   var width = 960, height = 640;
+
+  // 数据来源：'local' = IndexedDB 本机重算结果（graph_local）；'cli' = 静态 graph.json
+  var dataSource = 'cli';
+  var localBuiltAt = '';       // 本机结果的存档时间（generated_at 缺失时展示用）
+  var dataModule = null;       // 动态 import 的 data.js（供「清空本机结果」调用）
 
   var domainById = {}, colorOf = {};
   var allNodes = [], allLinks = [];
@@ -480,11 +487,66 @@
     legendEl.hidden = true;
   }
 
-  function load() {
+  /* 来源徽标：🧠 本机重算 @时间 / 📦 CLI 产物 @generated_at；
+   * 「清空本机结果」按钮仅本机来源时显示 */
+  function renderSourceMeta() {
+    if (!rawData) return;
+    if (dataSource === 'local') {
+      sourceBadgeEl.textContent = '🧠 本机重算 @' + (rawData.generated_at || localBuiltAt || '');
+      clearLocalBtn.hidden = false;
+    } else {
+      sourceBadgeEl.textContent = '📦 CLI 产物 @' + (rawData.generated_at || '');
+      clearLocalBtn.hidden = true;
+    }
+    sourceBadgeEl.hidden = !sourceBadgeEl.textContent;
+  }
+
+  // 读取本机重算结果（IndexedDB graph_local store，见 concepts 页「重新计算图谱」）。
+  // IndexedDB 异常或记录不合法 → 返回 null，静默回退 fetch 静态图。
+  async function fetchLocalGraphRecord() {
+    try {
+      dataModule = await import('./data.js');
+      const rec = await dataModule.getLocalGraph();
+      if (rec && rec.graph && Array.isArray(rec.graph.notes) && Array.isArray(rec.graph.concepts)) {
+        return rec;
+      }
+    } catch (err) {
+      console.warn('[graph] 读取本机重算结果失败，回退 CLI 静态产物:', err);
+    }
+    return null;
+  }
+
+  function applyData() {
+    loadingEl.hidden = true;
+    buildGraph();
+    initSvg();
+    startSimulation();
+    resize();
+    renderLegend();
+    renderBookFilter();
+    update();
+    window.addEventListener('resize', resize);
+  }
+
+  async function load() {
     if (typeof d3 === 'undefined') {
       showError('D3 库加载失败（请检查 vendor/d3.min.js）');
       return;
     }
+
+    // 本机优先：命中即渲染本机重算结果并标记来源
+    const rec = await fetchLocalGraphRecord();
+    if (rec) {
+      rawData = rec.graph;
+      dataSource = 'local';
+      localBuiltAt = rec.builtAt || '';
+      renderSourceMeta();
+      applyData();
+      return;
+    }
+
+    // 回落：CLI 静态产物（现状逻辑不变）
+    dataSource = 'cli';
     fetch('graph.json', { cache: 'no-store' })
       .then(function (res) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -493,15 +555,8 @@
       .then(function (data) {
         if (!data || !Array.isArray(data.notes)) throw new Error('graph.json 格式不正确');
         rawData = data;
-        loadingEl.hidden = true;
-        buildGraph();
-        initSvg();
-        startSimulation();
-        resize();
-        renderLegend();
-        renderBookFilter();
-        update();
-        window.addEventListener('resize', resize);
+        renderSourceMeta();
+        applyData();
       })
       .catch(function (err) {
         console.warn('[graph] 加载 graph.json 失败:', err);
@@ -516,6 +571,16 @@
     update();
   });
   panelClose.addEventListener('click', closePanel);
+
+  // 清空本机重算结果 → 刷新页面回到 CLI 产物（仅来源=local 时可见）
+  clearLocalBtn.addEventListener('click', function () {
+    if (!dataModule || typeof dataModule.clearLocalGraph !== 'function') return;
+    dataModule.clearLocalGraph().then(function () {
+      location.reload();
+    }).catch(function (err) {
+      console.warn('[graph] 清除本机重算结果失败:', err);
+    });
+  });
 
   load();
 })();

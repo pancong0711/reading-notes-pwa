@@ -13,6 +13,9 @@
  *   书籍元信息（books store，主键 name）：
  *     { name, author, status, rating, tags, summary, cover, started, finished }
  *
+ * 版本 v5（本仓库）：在 v4 基础上新增 graph_local store——
+ *   本机重算 union 图谱的存档位（与 diary.js 双侧同步升级，两处 schema 必须一致）。
+ *
  * 对外提供：
  *   importNotePackage(json)  —— 清空重建，导入整包（接受 { notes, books } / { notes } / 裸数组）
  *   exportNotePackage()      —— 导出 { notes: [...], books: [...], exportedAt }
@@ -24,16 +27,23 @@
  *   saveBook(meta)           —— 单本 upsert：合并现有记录后按 name 写入（只覆盖传入字段）
  *   getAllBooksRaw()         —— 读取全部书籍元信息，按 name 排序
  *   getAllBooks()            —— 聚合书架：笔记书名集合 × books meta，返回带统计的数组
+ *   getConceptCatalog / saveConceptCatalog / getAllConcepts / getAllDomains 等
+ *                            —— 概念目录工作副本的读写增删改
+ *   importConceptCatalog / exportConceptCatalogYaml —— 概念目录工作副本的导入导出
+ *   saveLocalGraph(graph)    —— 保存本机重算图谱（graph_local store 单条记录 id='union'）
+ *   getLocalGraph()          —— 读取本机重算图谱记录（无则 null）
+ *   clearLocalGraph()        —— 清除本机重算图谱（图谱页回退 CLI 静态产物）
  *
  * importNotePackage / exportNotePackage 同时挂到 window，
  * 便于页面与浏览器控制台直接调用。
  */
 
 const DB_NAME = 'reading-notes';
-const DB_VERSION = 4;   // v2：增加 type 索引（与 diary.js 统一 schema）；v3：增加 books store（keyPath: name）；v4：增加 concept_catalog store
+const DB_VERSION = 5;   // v2：增加 type 索引；v3：books store；v4：concept_catalog store；v5：graph_local store（本机重算图谱，diary.js 同步升级）
 const STORE = 'notes';
 const BOOKS_STORE = 'books';
 const CONCEPTS_STORE = 'concept_catalog';   // 概念目录工作副本，keyPath: id
+const GRAPH_LOCAL_STORE = 'graph_local';    // 本机重算 union 图谱存档，keyPath: id
 
 let _dbPromise = null;
 let _noteSeq = 0;   // 本地新记录 id 递增序号，避免同一毫秒内并发/连续新增时 id 冲突
@@ -72,6 +82,10 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(CONCEPTS_STORE)) {
         db.createObjectStore(CONCEPTS_STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(GRAPH_LOCAL_STORE)) {
+        // v5 新增：本机重算 union 图谱存档（diary.js 同步升级补建，两处 schema 必须一致）
+        db.createObjectStore(GRAPH_LOCAL_STORE, { keyPath: 'id' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -845,6 +859,75 @@ export async function exportConceptCatalogYaml() {
   return lines.join('\n') + '\n';
 }
 
+/* ══════════════════════════════════════════════════════════
+   本机图谱存档（阶段二：PWA 浏览器端重算 union 图谱）
+   graph_local store 单条记录 id='union'：
+     { id: 'union', graph: <buildUnionGraph 输出>, builtAt: <ISO 时间>, source: 'local' }
+   与 CLI 静态产物 app/pwa/graph.json 相互独立：图谱页优先读本机结果，
+   清除后回退 CLI 产物。算法来自 graph-build.js（纯函数），本层只管存取。
+   ══════════════════════════════════════════════════════════ */
+
+const GRAPH_LOCAL_KEY = 'union';
+
+/**
+ * 保存本机重算图谱（单条记录，覆盖写）。
+ * @param {object} graph  buildUnionGraph 的输出，须含 notes/domains/concepts/edges
+ *                        数组与 stats 对象（graph.json schema）；不合法抛中文 Error
+ * @returns {Promise<{id:string, graph:object, builtAt:string, source:string}>} 完整记录
+ */
+export async function saveLocalGraph(graph) {
+  if (!graph || typeof graph !== 'object' || Array.isArray(graph)) {
+    throw new Error('saveLocalGraph：图谱数据不合法（须为 graph.json 结构的对象）');
+  }
+  if (!Array.isArray(graph.notes) || !Array.isArray(graph.domains)
+    || !Array.isArray(graph.concepts) || !Array.isArray(graph.edges)
+    || !graph.stats || typeof graph.stats !== 'object') {
+    throw new Error('saveLocalGraph：图谱缺少 notes/domains/concepts/edges/stats 字段，已拒绝写入');
+  }
+  const record = {
+    id: GRAPH_LOCAL_KEY,
+    graph,
+    builtAt: new Date().toISOString(),
+    source: 'local',
+  };
+  const db = await openDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(GRAPH_LOCAL_STORE, 'readwrite');
+    tx.objectStore(GRAPH_LOCAL_STORE).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+  return record;
+}
+
+/**
+ * 读取本机重算图谱记录。
+ * @returns {Promise<object|null>} 记录 { id, graph, builtAt, source }；无记录返回 null
+ *   （IndexedDB 读失败时抛错，由调用方决定回退策略）
+ */
+export async function getLocalGraph() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(GRAPH_LOCAL_STORE, 'readonly')
+      .objectStore(GRAPH_LOCAL_STORE).get(GRAPH_LOCAL_KEY);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/** 清除本机重算图谱（删除单条记录），图谱页回退 CLI 静态产物 */
+export async function clearLocalGraph() {
+  const db = await openDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(GRAPH_LOCAL_STORE, 'readwrite');
+    tx.objectStore(GRAPH_LOCAL_STORE).delete(GRAPH_LOCAL_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 /* 挂到 window，便于页面与控制台调用 */
 window.importNotePackage = importNotePackage;
 window.exportNotePackage = exportNotePackage;
@@ -870,3 +953,6 @@ window.importConceptCatalog = importConceptCatalog;
 window.importConceptCatalogFromGraph = importConceptCatalogFromGraph;
 window.exportConceptCatalogYaml = exportConceptCatalogYaml;
 window.getDomainNameMap = getDomainNameMap;
+window.saveLocalGraph = saveLocalGraph;
+window.getLocalGraph = getLocalGraph;
+window.clearLocalGraph = clearLocalGraph;
