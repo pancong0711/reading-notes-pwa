@@ -1281,3 +1281,62 @@ main {
   display: flex;
   gap: 10px;
 }
+
+/* ── 概念管理面板（阶段二） ── */
+
+/* 域下拉/文本域统一（复用 .field 基础，补 select） */
+.field select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #2c2c2c;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  box-sizing: border-box;
+}
+.field select:focus {
+  outline: none;
+  border-color: #c9a96e;
+  box-shadow: 0 0 0 2px rgba(201, 169, 110, 0.18);
+}
+
+/* 概念卡片行（编辑/删除按钮不触发展开） */
+.concept-row {
+  cursor: default;
+}
+.concept-row .note-title {
+  margin: 4px 0 2px;
+  font-size: 17px;
+}
+.concept-row .concept-desc {
+  margin: 4px 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 导出 YAML 文本框 */
+.export-textarea {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fdfbf7;
+  color: var(--ink);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+/* 删除引用清单 */
+.delete-ref-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}

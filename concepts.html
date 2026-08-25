@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>概念管理 · 读书笔记</title>
+  <link rel="stylesheet" href="styles.css?v=20260824">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html">读书笔记</a>
+      <nav class="nav" id="main-nav"></nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="welcome">
+      <h1>概念管理</h1>
+      <p>知识图谱 key（概念目录）的增删改。改动先保存到本机 IndexedDB，再「导出 concepts.yaml」带回电脑端运行 <code>graph build</code>。</p>
+    </section>
+
+    <!-- 载入 / 导出工具栏 -->
+    <div class="toolbar">
+      <span class="count" id="catalog-count"></span>
+      <div class="toolbar-actions">
+        <button class="btn ghost" id="load-graph-btn" type="button">从 graph.json 载入</button>
+        <button class="btn ghost" id="load-file-btn" type="button">上传 JSON 载入</button>
+        <input type="file" id="load-file" accept=".json,application/json" hidden>
+        <button class="btn ghost" id="export-btn" type="button">导出 concepts.yaml</button>
+        <button class="btn primary" id="new-btn" type="button">＋ 新增概念</button>
+      </div>
+    </div>
+
+    <!-- 概念列表（按域分组）挂载点 -->
+    <div id="concept-list"></div>
+
+    <!-- 空状态 -->
+    <div class="empty-state" id="empty-state" hidden>
+      <h2>还没有概念目录</h2>
+      <p>点「上传 JSON 载入」导入 CLI 导出的概念目录，或「从 graph.json 载入」读入现有图谱。</p>
+    </div>
+
+    <!-- 新增/编辑表单 -->
+    <div id="editor" class="editor" hidden>
+      <h2 id="editor-title">新增概念</h2>
+
+      <label class="field">ID（唯一，小写字母/数字/连字符）
+        <input id="f-id" type="text" placeholder="如：entropy">
+      </label>
+
+      <label class="field">名称
+        <input id="f-name" type="text" placeholder="如：熵（进阶）">
+      </label>
+
+      <label class="field">域
+        <select id="f-domain"></select>
+      </label>
+
+      <label class="field">别名（逗号分隔）
+        <input id="f-aliases" type="text" placeholder="如：熵增,无序度">
+      </label>
+
+      <label class="field">关键词（逗号分隔）
+        <input id="f-keywords" type="text" placeholder="如：熵,热力学第二定律">
+      </label>
+
+      <label class="field">关联概念 ID（逗号分隔）
+        <input id="f-related" type="text" placeholder="如：energy_band,statistical">
+      </label>
+
+      <label class="field">描述
+        <textarea id="f-description" rows="3" placeholder="概念说明"></textarea>
+      </label>
+
+      <div class="editor-actions">
+        <button class="btn primary" id="save-btn" type="button">保存</button>
+        <button class="btn ghost" id="cancel-btn" type="button">取消</button>
+      </div>
+    </div>
+
+    <!-- 导出提示对话框 -->
+    <div id="export-panel" class="type-manage" hidden>
+      <h2>导出 concepts.yaml</h2>
+      <p class="muted">把下面的 YAML 拷贝回电脑端的 <code>concepts.yaml</code>（覆盖根目录文件），然后运行 <code>reading-notes graph build</code> 重建图谱。</p>
+      <textarea id="export-text" rows="18" class="export-textarea" readonly></textarea>
+      <div class="editor-actions">
+        <button class="btn primary" id="export-download" type="button">下载为文件</button>
+        <button class="btn ghost" id="export-close" type="button">关闭</button>
+      </div>
+    </div>
+
+    <!-- 删除确认对话框 -->
+    <div id="delete-panel" class="type-manage" hidden>
+      <h2>删除概念</h2>
+      <p id="delete-info" class="muted"></p>
+      <div id="delete-refs" class="muted"></div>
+      <div class="editor-actions">
+        <button class="btn ghost danger" id="delete-confirm" type="button">仍要删除（清除引用）</button>
+        <button class="btn ghost" id="delete-cancel" type="button">取消</button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">读书笔记 · 本地浏览</div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- 与现有页面一致：file-warning.js → sw-register.js → types.js（导航）→ concepts.js（ES Module，依赖 data.js） -->
+  <script src="file-warning.js"></script>
+  <script src="sw-register.js"></script>
+  <script src="types.js"></script>
+  <script>
+    document.getElementById('main-nav').innerHTML = NoteTypes.renderNav('concepts');
+  </script>
+  <script type="module" src="concepts.js?v=20260824"></script>
+</body>
+</html>

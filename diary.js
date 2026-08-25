@@ -7,7 +7,7 @@
   'use strict';
 
   var DB_NAME = 'reading-notes';   // 数据库名，与数据层约定一致
-  var DB_VERSION = 3;              // 与 data.js 保持一致（schema 统一：v3 增加 books store）
+  var DB_VERSION = 4;              // 与 data.js 保持一致（schema 统一：v4 增加 concept_catalog store）
   var STORE = 'notes';             // 对象仓库名
   var TYPE_DIARY = 'diary';        // 日记类型标记
 
@@ -36,6 +36,10 @@
         // 无论哪个模块先触发升级都要补齐，避免先建库者缺 store
         if (!db.objectStoreNames.contains('books')) {
           db.createObjectStore('books', { keyPath: 'name' });
+        }
+        // concept_catalog 仓库（PWA 概念管理工作副本）：与 data.js 保持同一 schema
+        if (!db.objectStoreNames.contains('concept_catalog')) {
+          db.createObjectStore('concept_catalog', { keyPath: 'id' });
         }
       };
       req.onsuccess = function () { resolve(req.result); };

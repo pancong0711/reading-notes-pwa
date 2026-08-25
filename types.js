@@ -128,6 +128,7 @@
       '<a href="index.html"' + (activeKey === 'index' ? ' class="active"' : '') + '>阅读足迹</a>',
       '<a href="book.html"' + (activeKey === 'book' ? ' class="active"' : '') + '>书架</a>',
       '<a href="graph.html"' + (activeKey === 'graph' ? ' class="active"' : '') + '>知识图谱</a>',
+      '<a href="concepts.html"' + (activeKey === 'concepts' ? ' class="active"' : '') + '>概念管理</a>',
     ];
     getTypes().forEach(function (t) {
       parts.push(

@@ -30,9 +30,10 @@
  */
 
 const DB_NAME = 'reading-notes';
-const DB_VERSION = 3;   // v2：增加 type 索引（与 diary.js 统一 schema）；v3：增加 books store（keyPath: name）
+const DB_VERSION = 4;   // v2：增加 type 索引（与 diary.js 统一 schema）；v3：增加 books store（keyPath: name）；v4：增加 concept_catalog store
 const STORE = 'notes';
 const BOOKS_STORE = 'books';
+const CONCEPTS_STORE = 'concept_catalog';   // 概念目录工作副本，keyPath: id
 
 let _dbPromise = null;
 let _noteSeq = 0;   // 本地新记录 id 递增序号，避免同一毫秒内并发/连续新增时 id 冲突
@@ -68,6 +69,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(BOOKS_STORE)) {
         db.createObjectStore(BOOKS_STORE, { keyPath: 'name' });
+      }
+      if (!db.objectStoreNames.contains(CONCEPTS_STORE)) {
+        db.createObjectStore(CONCEPTS_STORE, { keyPath: 'id' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -501,6 +505,346 @@ export async function deleteNote(id) {
   });
 }
 
+/* ══════════════════════════════════════════════════════════
+   概念目录管理（PWA 阶段二，本地工作副本）
+   与 CLI concept_catalog.py 保持同一套校验规则：
+     · id 唯一
+     · domain 须在 domains 表
+     · 编辑字段 ∈ id|name|domain|aliases|keywords|related|description（列表类整段替换）
+     · 删除默认保护：被笔记/日记引用时拒绝（需 force 并同步清除引用标注）
+   改动仅存本地 IndexedDB，写回方式为「导出 concepts.yaml」带回电脑端。
+   ══════════════════════════════════════════════════════════ */
+
+/* 概念目录工作副本（单条记录 id='main'） */
+const CONCEPT_CATALOG_KEY = 'main';
+
+function _strList(value) {
+  if (value == null) return [];
+  const raw = Array.isArray(value) ? value : String(value).split(',');
+  const seen = new Set();
+  const out = [];
+  for (const v of raw) {
+    const s = String(v).trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+/** 规整一组概念记录：字段补全 / 列表规整，不校验（供载入） */
+function normalizeConceptDef(c) {
+  return {
+    id: String(c && c.id != null ? c.id : '').trim(),
+    name: String(c && c.name != null ? c.name : '').trim(),
+    domain: String(c && c.domain != null ? c.domain : '').trim(),
+    aliases: _strList(c && c.aliases),
+    keywords: _strList(c && c.keywords),
+    notes: _strList(c && c.notes),
+    related: _strList(c && c.related),
+    description: String(c && c.description != null ? c.description : '').trim(),
+  };
+}
+
+/** 规整一条域定义 */
+function normalizeDomainDef(d) {
+  return {
+    id: String(d && d.id != null ? d.id : '').trim(),
+    name: String(d && d.name != null ? d.name : '').trim() || String(d && d.id != null ? d.id : '').trim(),
+    color: String(d && d.color != null ? d.color : '').trim(),
+  };
+}
+
+/**
+ * 校验概念目录：id 唯一 + domain 存在 + 基本字段非空。抛 Error（中文），返回 true。
+ */
+function validateConceptCatalog(catalog) {
+  const domains = (catalog && catalog.domains) || [];
+  const concepts = (catalog && catalog.concepts) || [];
+  const ids = new Set();
+  for (const d of domains) {
+    if (d.id) ids.add(d.id);
+  }
+  const seen = new Set();
+  for (const c of concepts) {
+    if (!c || !c.id) continue;
+    if (seen.has(c.id)) {
+      throw new Error(`概念 id 重复：${c.id}`);
+    }
+    seen.add(c.id);
+    if (c.domain && !ids.has(c.domain)) {
+      throw new Error(`概念「${c.id}」的域「${c.domain}」不存在`);
+    }
+  }
+  return true;
+}
+
+/** 读取概念目录工作副本；无则返回 null */
+export async function getConceptCatalog() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(CONCEPTS_STORE, 'readonly').objectStore(CONCEPTS_STORE).get(CONCEPT_CATALOG_KEY);
+    req.onsuccess = () => resolve(req.result ? req.result.catalog : null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/** 全量保存概念目录工作副本（覆盖） */
+export async function saveConceptCatalog(catalog) {
+  validateConceptCatalog(catalog);
+  const clean = {
+    domains: ((catalog && catalog.domains) || []).map(normalizeDomainDef).filter((d) => d.id),
+    concepts: ((catalog && catalog.concepts) || []).map(normalizeConceptDef).filter((c) => c.id),
+  };
+  validateConceptCatalog(clean);
+  const db = await openDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(CONCEPTS_STORE, 'readwrite');
+    tx.objectStore(CONCEPTS_STORE).put({ id: CONCEPT_CATALOG_KEY, catalog: clean });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+  return clean;
+}
+
+/** 概念列表（按域排序） */
+export async function getAllConcepts() {
+  const catalog = await getConceptCatalog();
+  const concepts = (catalog && catalog.concepts) || [];
+  const domains = (catalog && catalog.domains) || [];
+  const domainRank = new Map(domains.map((d, i) => [d.id, i]));
+  return concepts.slice().sort((a, b) =>
+    (domainRank.get(a.domain) ?? 999) - (domainRank.get(b.domain) ?? 999)
+    || a.name.localeCompare(b.name, 'zh'));
+}
+
+/** 域列表 */
+export async function getAllDomains() {
+  const catalog = await getConceptCatalog();
+  return (catalog && catalog.domains) || [];
+}
+
+/** 找单个概念（不存在返回 null） */
+export async function getConceptById(cid) {
+  const concepts = await getAllConcepts();
+  return concepts.find((c) => c.id === cid) || null;
+}
+
+/**
+ * 新增概念。参数与 CLI concept new 一致。校验后写入。
+ * @returns {Promise<object>} 新增后的概念记录
+ */
+export async function addConcept({ id, name, domain, aliases = '', keywords = '', related = '', description = '' }) {
+  const catalog = await getConceptCatalog() || { domains: [], concepts: [] };
+  const cid = String(id || '').trim();
+  const cname = String(name || '').trim();
+  const cdomain = String(domain || '').trim();
+  if (!cid) throw new Error('概念 id 不能为空');
+  if (!cname) throw new Error('概念名称不能为空');
+  const domainIds = new Set((catalog.domains || []).map((d) => d.id));
+  if (!domainIds.has(cdomain)) {
+    const avail = [...domainIds].sort().join('、') || '（暂无已定义域）';
+    throw new Error(`域「${cdomain}」不存在，可选域：${avail}`);
+  }
+  if (catalog.concepts.some((c) => c.id === cid)) {
+    throw new Error(`概念 id「${cid}」已存在，请换一个 id`);
+  }
+  const concept = normalizeConceptDef({
+    id: cid, name: cname, domain: cdomain,
+    aliases, keywords, related, description,
+  });
+  catalog.concepts.push(concept);
+  await saveConceptCatalog(catalog);
+  return concept;
+}
+
+/** 可编辑字段（与 CLI 一致） */
+export const CONCEPT_EDITABLE_FIELDS = ['id', 'name', 'domain', 'aliases', 'keywords', 'related', 'description'];
+
+/**
+ * 编辑概念字段。与 CLI concept edit 一致（--field id 为改名，v1 不迁移引用）。
+ * @returns {Promise<{concept:object, warning:string|null}>}
+ */
+export async function editConcept(cid, field, value) {
+  const catalog = await getConceptCatalog() || { domains: [], concepts: [] };
+  if (!CONCEPT_EDITABLE_FIELDS.includes(field)) {
+    throw new Error(`不支持的字段：${field}（可选：${CONCEPT_EDITABLE_FIELDS.join(' | ')}）`);
+  }
+  const target = catalog.concepts.find((c) => c.id === cid);
+  if (!target) throw new Error(`概念「${cid}」不存在于概念目录`);
+  let warning = null;
+  if (field === 'aliases' || field === 'keywords' || field === 'related') {
+    target[field] = _strList(value);
+  } else if (field === 'id') {
+    const newId = String(value || '').trim();
+    if (!newId) throw new Error('概念 id 不能为空');
+    if (catalog.concepts.some((c) => c.id === newId)) {
+      throw new Error(`概念 id「${newId}」已存在`);
+    }
+    const refs = await scanConceptReferences(cid);
+    if (refs.length) warning = `存在 ${refs.length} 处引用（v1 不自动迁移）`;
+    target.id = newId;
+  } else {
+    target[field] = String(value == null ? '' : value).trim();
+    if (field === 'domain' && target[field] && !(catalog.domains || []).some((d) => d.id === target[field])) {
+      throw new Error(`域「${target[field]}」不存在`);
+    }
+  }
+  await saveConceptCatalog(catalog);
+  return { concept: target, warning };
+}
+
+/**
+ * 扫描某概念 id 被哪些本地笔记/日记引用（记录 concepts 含该 id）。
+ * @returns {Promise<Array<{type:string, title:string, id:string}>>}
+ */
+export async function scanConceptReferences(cid) {
+  const all = await getAllNotes();
+  const out = [];
+  for (const n of all) {
+    const concepts = Array.isArray(n.concepts) ? n.concepts : [];
+    const hit = concepts.some((c) => {
+      let cid2 = '';
+      if (typeof c === 'string') cid2 = c.trim();
+      else if (c && typeof c === 'object') cid2 = String(c.id || '').trim();
+      return cid2 === cid;
+    });
+    if (hit) out.push({ type: n.type || 'note', title: n.title || '未命名', id: n.id });
+  }
+  return out;
+}
+
+/**
+ * 删除概念。默认保护：被本地笔记/日记引用时拒绝；force 时先清除引用标注再删。
+ * @returns {Promise<{deleted:object, clearedReferences:number}>}
+ */
+export async function deleteConcept(cid, { force = false } = {}) {
+  const catalog = await getConceptCatalog() || { domains: [], concepts: [] };
+  const target = catalog.concepts.find((c) => c.id === cid);
+  if (!target) throw new Error(`概念「${cid}」不存在于概念目录`);
+  const refs = await scanConceptReferences(cid);
+  if (refs.length && !force) {
+    throw new Error(`概念「${cid}」被 ${refs.length} 处引用，拒绝删除（force 可强制删除并清除引用）`);
+  }
+  if (refs.length) {
+    // force：逐条清除引用标注
+    for (const r of refs) {
+      await _removeConceptFromNote(r.id, cid);
+    }
+  }
+  catalog.concepts = catalog.concepts.filter((c) => c.id !== cid);
+  await saveConceptCatalog(catalog);
+  return { deleted: target, clearedReferences: refs.length };
+}
+
+/** 从单条笔记移除指定概念标注（internal，供 force 删除用） */
+async function _removeConceptFromNote(noteId, cid) {
+  const all = await getAllNotes();
+  const note = all.find((n) => n.id === noteId);
+  if (!note) return;
+  const concepts = (note.concepts || []).filter((c) => {
+    let cid2 = '';
+    if (typeof c === 'string') cid2 = c.trim();
+    else if (c && typeof c === 'object') cid2 = String(c.id || '').trim();
+    return cid2 !== cid;
+  });
+  await addNote({ ...note, concepts, updatedAt: Date.now() });
+}
+
+/**
+ * 从 JSON 载入概念目录工作副本（覆盖）。
+ * 接受：{domains, concepts}  或  CLI `concept list --json` 的裸概念数组。
+ * 返回规范化后的 {domains, concepts}。
+ */
+export async function importConceptCatalog(json) {
+  let domains = [];
+  let concepts = [];
+  if (Array.isArray(json)) {
+    concepts = json;
+  } else if (json && typeof json === 'object') {
+    domains = json.domains || [];
+    concepts = json.concepts || [];
+  }
+  const clean = {
+    domains: (Array.isArray(domains) ? domains : []).map(normalizeDomainDef).filter((d) => d.id),
+    concepts: (Array.isArray(concepts) ? concepts : []).map(normalizeConceptDef).filter((c) => c.id),
+  };
+  validateConceptCatalog(clean);
+  await saveConceptCatalog(clean);
+  return clean;
+}
+
+/** 从 graph.json 结构生成工作副本（graph.json 概念缺 aliases/keywords，容缺失） */
+export async function importConceptCatalogFromGraph(graph) {
+  const domains = (graph && graph.domains) || [];
+  const concepts = (graph && graph.concepts) || [];
+  return importConceptCatalog({ domains, concepts });
+}
+
+/** 域 id → 显示名映射 */
+export async function getDomainNameMap() {
+  const domains = await getAllDomains();
+  const map = {};
+  for (const d of domains) map[d.id] = d.name || d.id;
+  return map;
+}
+
+/** 把单个值格式化为 YAML 块列表缩进 */
+function _yamlList(items, indent) {
+  const pad = ' '.repeat(indent);
+  return items.map((it) => `${pad}- ${typeof it === 'string' ? it : JSON.stringify(it)}`).join('\n');
+}
+
+/**
+ * 导出当前工作副本为 concepts.yaml 文本（与根 concepts.yaml 结构/格式一致）。
+ * 仅输出存在的字段（domain 无 color 时省略 color），便于用户拷贝回电脑端。
+ * @returns {Promise<string>} YAML 文本
+ */
+export async function exportConceptCatalogYaml() {
+  const catalog = await getConceptCatalog() || { domains: [], concepts: [] };
+  const lines = [];
+  lines.push('domains:');
+  for (const d of catalog.domains || []) {
+    lines.push(`- id: ${d.id}`);
+    lines.push(`  name: ${d.name}`);
+    if (d.color) lines.push(`  color: '${d.color}'`);
+  }
+  lines.push('concepts:');
+  for (const c of catalog.concepts || []) {
+    lines.push(`- id: ${c.id}`);
+    lines.push(`  name: ${c.name}`);
+    lines.push(`  domain: ${c.domain}`);
+    if (Array.isArray(c.aliases) && c.aliases.length) {
+      lines.push('  aliases:');
+      for (const a of c.aliases) lines.push(`  - ${a}`);
+    }
+    if (Array.isArray(c.keywords) && c.keywords.length) {
+      lines.push('  keywords:');
+      for (const k of c.keywords) lines.push(`  - ${k}`);
+    }
+    if (Array.isArray(c.notes) && c.notes.length) {
+      lines.push('  notes:');
+      for (const n of c.notes) lines.push(`  - ${n}`);
+    }
+    if (Array.isArray(c.related) && c.related.length) {
+      lines.push('  related:');
+      for (const r of c.related) lines.push(`  - ${r}`);
+    }
+    if (c.description) {
+      // 多行描述用块标量；单行用普通字符串
+      const desc = String(c.description);
+      if (desc.includes('\n')) {
+        lines.push(`  description: |`);
+        for (const dl of desc.split('\n')) lines.push(`    ${dl}`);
+      } else {
+        lines.push(`  description: ${desc}`);
+      }
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+
 /* 挂到 window，便于页面与控制台调用 */
 window.importNotePackage = importNotePackage;
 window.exportNotePackage = exportNotePackage;
@@ -513,3 +857,16 @@ window.getAllBooksRaw = getAllBooksRaw;
 window.getAllTags = getAllTags;
 window.renameTag = renameTag;
 window.deleteTag = deleteTag;
+window.getConceptCatalog = getConceptCatalog;
+window.saveConceptCatalog = saveConceptCatalog;
+window.getAllConcepts = getAllConcepts;
+window.getAllDomains = getAllDomains;
+window.getConceptById = getConceptById;
+window.addConcept = addConcept;
+window.editConcept = editConcept;
+window.deleteConcept = deleteConcept;
+window.scanConceptReferences = scanConceptReferences;
+window.importConceptCatalog = importConceptCatalog;
+window.importConceptCatalogFromGraph = importConceptCatalogFromGraph;
+window.exportConceptCatalogYaml = exportConceptCatalogYaml;
+window.getDomainNameMap = getDomainNameMap;

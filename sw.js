@@ -7,7 +7,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v10';
+var CACHE_NAME = 'reading-notes-v11';
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [
@@ -34,6 +34,8 @@ var CORE_ASSETS = [
   './graph.js',
   './graph.css',
   './graph.json',
+    './concepts.html',
+    './concepts.js',
   './vendor/d3.min.js'
 ];
 
