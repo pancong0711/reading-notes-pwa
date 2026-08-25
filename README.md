@@ -1,5 +1,8 @@
 # 📚 读书笔记 PWA（公开版）
 
+> 🌐 **在线使用**：<https://pancong0711.github.io/reading-notes-pwa/>
+> （手机浏览器打开 → 添加到主屏幕 → 导入自己的数据包即可开始）
+
 > 读书笔记项目的**前端静态版**（CLI + PWA 架构：电脑端 CLI 为主数据源，网页端跨终端阅读/轻编辑）。
 > **本仓库不包含任何个人数据**：`notes/`、`export.json`、`graph.json` 均为示例/空数据，
 > 个人数据只存储在你自己的设备本地（浏览器 IndexedDB）与你的电脑（Markdown）。无服务器、无云端、无跟踪。
@@ -22,11 +25,11 @@
    git init
    git add .
    git commit -m "init: 读书笔记 PWA 公开版"
-   git remote add origin https://github.com/<你的用户名>/reading-notes-pwa.git
+   git remote add origin https://github.com/pancong0711/reading-notes-pwa.git
    git push -u origin main
    ```
 3. GitHub 仓库 → **Settings → Pages** → Source: `Deploy from a branch` → `main` / 根目录 → Save
-4. 等 1-2 分钟，访问 `https://<你的用户名>.github.io/reading-notes-pwa/`
+4. 等 1-2 分钟，访问 `https://pancong0711.github.io/reading-notes-pwa/`
 5. 手机浏览器打开 → 菜单「添加到主屏幕」→ 像 App 一样使用（首次访问后离线可用）
 
 > 更新版本：重新复制最新前端文件 → `git add -A && git commit && git push`；记得把 `sw.js` 里 `CACHE_NAME` 版本号 +1。
