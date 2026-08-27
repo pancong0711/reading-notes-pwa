@@ -21,6 +21,8 @@ import {
   renameTag,
   deleteTag,
 } from './data.js';
+import { renderNoteDetail } from './note-detail.js';
+import { filterNotesByScope, buildPrintHtml, buildMarkdownDraft, scopeLabel } from './print-export.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -55,6 +57,15 @@ const els = {
   tFields: $('t-fields'),
   manageClose: $('type-manage-close'),
   exportBtn: $('export-btn'),
+  exportPdfBtn: $('export-pdf-btn'),
+  exportPanel: $('export-panel'),
+  exportBook: $('export-book'),
+  exportType: $('export-type'),
+  exportFrom: $('export-from'),
+  exportTo: $('export-to'),
+  exportPrintBtn: $('export-print-btn'),
+  exportMdBtn: $('export-md-btn'),
+  exportClose: $('export-close'),
   importBtn: $('import-btn'),
   importFile: $('import-file'),
   syncBtn: $('sync-btn'),
@@ -618,6 +629,111 @@ async function doExport() {
   toast('已导出笔记包 JSON');
 }
 
+/* ── 导出 / 生成（打印草稿 / 下载书稿 md）────────────── */
+
+/** 概念目录转 catalogById（renderNoteDetail 用 id → 名称映射） */
+function catalogByIdMap() {
+  const map = {};
+  conceptCatalog.forEach((c) => { map[c.id] = c; });
+  return map;
+}
+
+/** 填充导出面板的书 / 类型下拉（打开时刷新） */
+async function renderExportSelects() {
+  const books = await getAllBooks();
+  els.exportBook.innerHTML = '<option value="">（选择书）</option>' +
+    books.map((b) => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
+  els.exportType.innerHTML = NoteTypes.getTypes()
+    .map((t) => `<option value="${esc(t.key)}">${t.icon} ${esc(t.label)}</option>`).join('');
+  if (currentType) els.exportType.value = currentType.key;  // 默认选中当前类型
+}
+
+/** 读取当前选择的导出范围配置 */
+function readExportScope() {
+  const scope = document.querySelector('input[name="export-scope"]:checked')?.value || 'all';
+  const book = els.exportBook.value || '';
+  const type = els.exportType.value || '';
+  const dateFrom = els.exportFrom.value || '';
+  const dateTo = els.exportTo.value || '';
+  let label = '全部';
+  if (scope === 'book') {
+    label = els.exportBook.selectedOptions[0]?.textContent || book;
+  } else if (scope === 'type') {
+    label = NoteTypes.getType(type)?.label || type;
+  } else if (scope === 'date') {
+    label = scopeLabel('date', { dateFrom, dateTo });
+  }
+  return { scope, book, type, dateFrom, dateTo, label };
+}
+
+/** 把打印 HTML 写入隐藏 iframe 并触发打印（避免弹窗拦截）；打印关闭后移除 */
+function printHtmlFrame(html) {
+  const frame = document.createElement('iframe');
+  frame.style.position = 'fixed';
+  frame.style.right = '0';
+  frame.style.bottom = '0';
+  frame.style.width = '0';
+  frame.style.height = '0';
+  frame.style.border = '0';
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open();
+  doc.write(html);
+  // 注入 base 指向当前页面，让详情里的相对图片（assets/…）按 app/pwa/ 解析
+  const base = doc.createElement('base');
+  base.href = location.href;
+  if (doc.head) doc.head.appendChild(base);
+  doc.close();
+  // 给样式/图片一点渲染时间；部分浏览器 print() 会阻塞到打印对话框关闭
+  setTimeout(() => {
+    try {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    } catch (e) {
+      toast(`打印失败：${e.message}`, 4200);
+    }
+    frame.remove();
+  }, 200);
+}
+
+/** 打印草稿：按范围取数 → 组装可打印 HTML → 打印窗口（浏览器另存 PDF） */
+async function doPrintDraft() {
+  const scope = readExportScope();
+  const all = await getAllNotes();
+  const list = filterNotesByScope(all, scope);
+  if (!list.length) {
+    toast('范围内没有记录，无法生成打印草稿');
+    return;
+  }
+  const title = `读书笔记 · ${scopeLabel(scope.scope, { label: scope.label, dateFrom: scope.dateFrom, dateTo: scope.dateTo })}`;
+  const html = buildPrintHtml(list, title, catalogByIdMap());
+  printHtmlFrame(html);
+  els.exportPanel.hidden = true;
+  toast('已打开打印窗口，可在打印对话框选择「另存为 PDF」');
+}
+
+/** 下载书稿（md）：按范围拼 markdown，文件名 书稿-<范围描述>-YYYYMMDD.md */
+async function doDownloadMd() {
+  const scope = readExportScope();
+  const all = await getAllNotes();
+  const list = filterNotesByScope(all, scope);
+  if (!list.length) {
+    toast('范围内没有记录，无法下载书稿');
+    return;
+  }
+  const title = `读书笔记 · ${scopeLabel(scope.scope, { label: scope.label, dateFrom: scope.dateFrom, dateTo: scope.dateTo })}`;
+  const md = buildMarkdownDraft(list, title);
+  const fileLabel = String(scope.label).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-');
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `书稿-${fileLabel}-${todayStr().replace(/-/g, '')}.md`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  els.exportPanel.hidden = true;
+  toast('已下载书稿 markdown');
+}
+
 /* ── 事件绑定 ── */
 els.newBtn.addEventListener('click', () => openEditor());
 els.emptyNewBtn.addEventListener('click', () => openEditor());
@@ -688,6 +804,13 @@ els.tagList.addEventListener('click', async (e) => {
 });
 
 els.exportBtn.addEventListener('click', doExport);
+els.exportPdfBtn.addEventListener('click', async () => {
+  await renderExportSelects();
+  els.exportPanel.hidden = false;
+});
+els.exportClose.addEventListener('click', () => { els.exportPanel.hidden = true; });
+els.exportPrintBtn.addEventListener('click', doPrintDraft);
+els.exportMdBtn.addEventListener('click', doDownloadMd);
 els.importBtn.addEventListener('click', () => els.importFile.click());
 els.importFile.addEventListener('change', () => {
   if (els.importFile.files[0]) doImport(els.importFile.files[0]);
@@ -758,25 +881,14 @@ els.list.addEventListener('click', async (event) => {
     return;
   }
 
-  // 点击卡片主体 → 展开/收起详情
+  // 点击卡片主体 → 展开/收起详情（共享渲染组件：markdown 正文 + 读者注/AI注 + 图片可达）
   const expanded = card.classList.toggle('expanded');
   if (expanded && !card.querySelector('.note-detail')) {
     const detail = document.createElement('div');
     detail.className = 'note-detail';
-    const meta = note.meta || {};
-    const parts = [];
-    if (note.tags && note.tags.length) parts.push(`<div class="note-sec"><h4>标签</h4><div class="note-tags">${note.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div></div>`);
-    const conceptDetail = (note.concepts || []).map((c) => {
-      const found = conceptCatalog.find((cc) => cc.id === c.id);
-      return `<span class="tag concept">${esc(found ? found.name : c.id)}<em>${esc(c.source || 'user')}</em></span>`;
-    }).join('');
-    if (conceptDetail) parts.push(`<div class="note-sec"><h4>概念</h4><div class="note-tags">${conceptDetail}</div></div>`);
-    if (note.content) parts.push(`<div class="note-sec"><h4>内容</h4><p>${esc(note.content)}</p></div>`);
-    if (note.readerNote) parts.push(`<div class="note-sec"><h4>读者注</h4><p>${esc(note.readerNote)}</p></div>`);
-    if (note.aiNote) parts.push(`<div class="note-sec"><h4>AI注</h4><p>${esc(note.aiNote)}</p></div>`);
-    if (meta.due) parts.push(`<div class="note-sec"><h4>截止</h4><p>${esc(meta.due)}</p></div>`);
-    if (note.imageData) parts.push(`<div class="note-sec"><img src="${note.imageData}" class="note-detail-img" alt="照片"></div>`);
-    detail.innerHTML = parts.join('') || '<p class="muted">（无更多内容）</p>';
+    const catalogById = {};
+    conceptCatalog.forEach((cc) => { catalogById[cc.id] = cc; });
+    detail.innerHTML = renderNoteDetail(note, catalogById);
     card.appendChild(detail);
   } else if (!expanded) {
     card.querySelector('.note-detail')?.remove();

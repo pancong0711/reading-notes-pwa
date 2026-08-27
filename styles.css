@@ -800,6 +800,58 @@ main {
   margin: 0;
 }
 
+/* ── markdown 渲染（note-detail.js 产出 .note-md）── */
+.note-md {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #444;
+  word-break: break-word;
+}
+.note-md h1, .note-md h2, .note-md h3, .note-md h4 {
+  font-size: 14px;
+  color: #a08a5c;
+  margin: 14px 0 6px;
+}
+.note-md h1 { font-size: 15px; }
+.note-md p { margin: 8px 0; }
+.note-md code {
+  background: #f3efe6;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+  word-break: break-all;
+}
+.note-md pre {
+  background: #f3efe6;
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.note-md pre code { background: none; padding: 0; }
+.note-md blockquote {
+  margin: 8px 0;
+  padding: 2px 12px;
+  border-left: 3px solid var(--accent);
+  color: #777;
+}
+.note-md ul, .note-md ol { margin: 8px 0; padding-left: 22px; }
+.note-md table { border-collapse: collapse; margin: 8px 0; width: 100%; }
+.note-md th, .note-md td {
+  border: 1px solid var(--line);
+  padding: 5px 9px;
+  font-size: 12px;
+}
+.note-md img { max-width: 100%; border-radius: 8px; margin: 6px 0; }
+.note-md a { color: #8a6d3b; text-decoration: underline; }
+.note-sec .note-detail-img {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 6px;
+}
+
 /* ── 按钮补充 ── */
 
 .btn.primary {

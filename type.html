@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>记录 · 读书笔记</title>
   <link rel="stylesheet" href="styles.css?v=20260808">
+  <style>
+    /* 导出/生成面板（范围选择行 + 操作按钮） */
+    .export-scope { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .export-opt { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+    .export-opt select,
+    .export-opt input[type="date"] { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; }
+    .export-actions { display: flex; gap: 10px; margin-top: 14px; }
+  </style>
 </head>
 <body>
   <header class="site-header">
@@ -31,6 +39,7 @@
         <button class="btn ghost" id="manage-btn" type="button">管理类型</button>
         <button class="btn ghost" id="tag-manage-btn" type="button">整理标签</button>
         <button class="btn ghost" id="export-btn" type="button">导出 JSON</button>
+        <button class="btn ghost" id="export-pdf-btn" type="button">导出/生成</button>
         <button class="btn ghost" id="import-btn" type="button">导入 JSON</button>
         <input type="file" id="import-file" accept=".json,application/json" hidden>
       </div>
@@ -129,6 +138,42 @@
         <button class="btn primary" type="submit">添加</button>
         <button class="btn ghost" id="type-manage-close" type="button">关闭</button>
       </form>
+    </div>
+
+    <!-- 导出/生成面板（打印草稿 / 下载书稿 md） -->
+    <div id="export-panel" class="type-manage" hidden>
+      <h2>导出 / 生成</h2>
+      <p class="muted">选择范围后生成：打印草稿在浏览器打印窗口另存为 PDF；书稿为 markdown 文本下载。</p>
+
+      <div class="export-scope">
+        <label class="export-opt">
+          <input type="radio" name="export-scope" value="all" checked>
+          <span>全部记录</span>
+        </label>
+        <label class="export-opt">
+          <input type="radio" name="export-scope" value="book">
+          <span>某本书</span>
+          <select id="export-book"></select>
+        </label>
+        <label class="export-opt">
+          <input type="radio" name="export-scope" value="type">
+          <span>某类型</span>
+          <select id="export-type"></select>
+        </label>
+        <label class="export-opt">
+          <input type="radio" name="export-scope" value="date">
+          <span>日期区间</span>
+          <input type="date" id="export-from">
+          <span class="muted">～</span>
+          <input type="date" id="export-to">
+        </label>
+      </div>
+
+      <div class="export-actions">
+        <button class="btn primary" id="export-print-btn" type="button">🖨 打印草稿</button>
+        <button class="btn ghost" id="export-md-btn" type="button">⬇ 下载书稿（md）</button>
+        <button class="btn ghost" id="export-close" type="button">关闭</button>
+      </div>
     </div>
 
     <!-- 导入对比面板 -->

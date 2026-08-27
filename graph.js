@@ -5,6 +5,7 @@
  *   - 点击概念 → 详情面板：分支概念（可跳转）+ 笔记题头（可进细节）
  *   - 书过滤 / 搜索 / 域显隐（图例）保留
  */
+import { renderNoteDetail } from './note-detail.js';
 (() => {
   'use strict';
 
@@ -50,6 +51,29 @@
   function domainName(id) { return (domainById[id] && domainById[id].name) || id; }
 
   /* ══ 数据装配：graph.json → 概念节点 + 概念间边 ══ */
+  var fullNoteMap = {};   // 'book\ntitle' → export.json 完整笔记（全文/读者注/AI注/图片富化）
+
+  /** 拉取 export.json 建全文映射（尽力而为，失败静默——面板回退 graph.json 基础字段） */
+  function loadFullNotes() {
+    fetch('export.json', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (pkg) {
+        if (!pkg || !Array.isArray(pkg.notes)) return;
+        (pkg.notes || []).forEach(function (n) {
+          if (n.book == null || n.title == null) return;
+          fullNoteMap[n.book + '\n' + n.title] = n;
+        });
+      })
+      .catch(function () {});
+  }
+
+  /** 图谱笔记面板的「笔记全文」：export.json 富化（按 book+title 匹配），失败回退原笔记 */
+  function fullNoteHtml(n) {
+    var m = {};
+    (rawData.concepts || []).forEach(function (c) { m[c.id] = c; });
+    var full = fullNoteMap[(n.book || '') + '\n' + (n.title || '')] || n;
+    return renderNoteDetail(full, m);
+  }
 
   function buildGraph() {
     domainById = {};
@@ -463,11 +487,13 @@
       (n.images && n.images.length
         ? '<div class="graph-panel-section"><h3>原文图片</h3><div class="graph-images">' +
           n.images.map(function (src, i) {
+            if (typeof src !== 'string') return '';
             return '<img loading="lazy" src="' + esc(src) + '" alt="' + esc(n.title) + ' 图' + (i + 1) +
               '" onerror="this.style.display=\'none\'">';
           }).join('') +
           '</div></div>'
-        : '');
+        : '') +
+      '<div class="graph-panel-section"><h3>笔记全文</h3>' + fullNoteHtml(n) + '</div>';
 
     openPanel(html);
     panelBody.querySelectorAll('.graph-concept-chip').forEach(function (btn) {
@@ -533,6 +559,9 @@
       showError('D3 库加载失败（请检查 vendor/d3.min.js）');
       return;
     }
+
+    // 拉取 export.json 全文映射（非阻塞，供笔记面板富化）
+    loadFullNotes();
 
     // 本机优先：命中即渲染本机重算结果并标记来源
     const rec = await fetchLocalGraphRecord();

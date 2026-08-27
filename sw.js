@@ -7,7 +7,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v13';
+var CACHE_NAME = 'reading-notes-v15';
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [
@@ -34,6 +34,9 @@ var CORE_ASSETS = [
   './graph.js',
   './graph.css',
   './graph-build.js',   // v12 补上（阶段一遗漏）：本机重算 union 图谱的纯函数模块
+  './note-detail.js',   // v14：笔记详情共享渲染（markdown/图片可达）
+  './print-export.js',   // v15：导出/生成打印草稿与书稿（范围过滤/打印 HTML 纯函数）
+  './vendor/markdown-lite.js',   // v14：本地 markdown 受控渲染器（无外链）
   './graph.json',
     './concepts.html',
     './concepts.js',
