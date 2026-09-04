@@ -95,6 +95,7 @@ const els = {
   fContent: $('f-content'),
   fProject: $('f-project'),
   projectList: $('project-list'),
+  filterBar: $('filter-bar'),
   filterProject: $('filter-project'),
   filterBook: $('filter-book'),
   filterFrom: $('filter-from'),
