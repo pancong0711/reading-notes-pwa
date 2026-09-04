@@ -163,6 +163,7 @@ function normalizeNote(raw, index) {
     characters: raw.characters && typeof raw.characters === 'object' ? raw.characters : {},
     extension: raw.extension || '',
     concepts: normalizeConcepts(raw.concepts),
+    project: typeof raw.project === 'string' ? raw.project.trim() : '',   // 项目维度（可选，因项目而读）
     meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {},   // 类型特有字段（memo: done/due 等）
     createdAt: raw.createdAt || Date.now(),
     updatedAt: raw.updatedAt || Date.now(),
@@ -506,6 +507,17 @@ export async function getNoteById(id) {
     req.onsuccess = () => resolve(req.result || null);
     req.onerror = () => reject(req.error);
   });
+}
+
+/** 全库去重项目名（按 updatedAt 降序，datalist/筛选下拉用） */
+export async function getAllProjects() {
+  const all = await getAllNotes();
+  const seen = new Set();
+  for (const n of all) {
+    const p = String(n.project || '').trim();
+    if (p) seen.add(p);
+  }
+  return [...seen];
 }
 
 /** 笔记总数 */

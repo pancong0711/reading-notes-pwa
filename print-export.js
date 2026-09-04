@@ -46,8 +46,12 @@ export function scopeLabel(scope, opts = {}) {
  * @returns {Array<object>} 过滤后的记录
  */
 export function filterNotesByScope(notes, opts = {}) {
-  const { scope = 'all', book = '', type = '', dateFrom = '', dateTo = '' } = opts;
+  const { scope = 'all', book = '', type = '', dateFrom = '', dateTo = '', project = '' } = opts;
   let list = Array.isArray(notes) ? notes.slice() : [];
+  if (project) {
+    const target = String(project);
+    list = list.filter((n) => String(n.project || '') === target);
+  }
   if (scope === 'book') {
     const target = String(book || '');
     list = list.filter((n) => String(n.book || '') === target);
@@ -86,6 +90,7 @@ function buildStats(list) {
 function buildPrintItem(n, catalogById) {
   const typeName = TYPE_LABELS[n.type] || '';  // 自定义类型不额外显示（详情内已见）
   const meta = [String(n.date || '无日期')];
+  if (n.project) meta.push(`📁 ${n.project}`);
   if (n.book) meta.push(`《${n.book}》`);
   if (typeName) meta.push(typeName);
   return `<article class="print-note">
@@ -196,6 +201,7 @@ export function buildMarkdownDraft(notes, title) {
   for (const n of list) {
     const meta = [];
     if (n.date) meta.push(`日期：${n.date}`);
+    if (n.project) meta.push(`项目：${n.project}`);
     if (n.book) meta.push(`书：《${n.book}》`);
     if (Array.isArray(n.tags) && n.tags.length) meta.push(`标签：${n.tags.join('、')}`);
     lines.push(`## ${n.title || '未命名'}`);

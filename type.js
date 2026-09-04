@@ -20,6 +20,7 @@ import {
   getAllTags,
   renameTag,
   deleteTag,
+  getAllProjects,
 } from './data.js';
 import { renderNoteDetailInto } from './note-detail.js';
 import { filterNotesByScope, buildPrintHtml, buildMarkdownDraft, scopeLabel } from './print-export.js';
@@ -92,6 +93,12 @@ const els = {
   fTags: $('f-tags'),
   fTitle: $('f-title'),
   fContent: $('f-content'),
+  fProject: $('f-project'),
+  projectList: $('project-list'),
+  filterProject: $('filter-project'),
+  filterBook: $('filter-book'),
+  filterFrom: $('filter-from'),
+  filterTo: $('filter-to'),
   mdToolbar: $('md-toolbar'),
   mdPreview: $('md-preview'),
   mdPreviewToggle: $('md-preview-toggle'),
@@ -111,6 +118,7 @@ let editingId = null;        // 正在编辑的记录 id（null = 新建）
 let photoData = '';          // 压缩 base64
 let notesCache = [];         // 当前类型列表缓存
 let searchQuery = '';        // 搜索框当前关键词（空 = 显示全量）
+let listFilters = { project: '', book: '', dateFrom: '', dateTo: '' };  // 筛选栏状态（与搜索 AND 叠加）
 let toastTimer = null;
 let conceptCatalog = [];     // graph.json 概念目录 [{id,name,domain}]
 let conceptDomainNames = {}; // domain_id -> domain_name
@@ -269,7 +277,8 @@ function renderList(notes) {
       : `<div class="note-thumb note-thumb-empty">${esc((currentType.icon) || '📝')}</div>`;
 
     const chips = fieldChips(n);
-    const metaLine = `<div class="note-meta">${esc(n.type === currentType.key ? currentType.label : n.type)} · ${esc(n.date || '无日期')}${chips.length ? ' · ' + chips.join(' · ') : ''}</div>`;
+    const typeLabelNow = currentType.key === 'all' ? (NoteTypes.getType(n.type || 'note')?.label || n.type) : currentType.label;
+    const metaLine = `<div class="note-meta">${esc(typeLabelNow)} · ${esc(n.date || '无日期')}${n.project ? ' · 📁 ' + esc(n.project) : ''}${chips.length ? ' · ' + chips.join(' · ') : ''}</div>`;
     const readerHtml = n.readerNote
       ? `<p class="note-note reader"><span>读者注</span>${esc(summary(n.readerNote))}</p>` : '';
     const aiHtml = n.aiNote
@@ -319,13 +328,14 @@ async function refresh() {
 
 /** 匹配字段：标题 / 内容 / 读者注 / AI注 / 标签（toLowerCase 包含匹配） */
 function matchesQuery(n, q) {
-  const fields = [n.title, n.content, n.readerNote, n.aiNote,
+  const fields = [n.title, n.content, n.readerNote, n.aiNote, n.project,
     ...(Array.isArray(n.tags) ? n.tags : []),
     ...(Array.isArray(n.concepts) ? n.concepts.map((c) => c.id) : []),
     ...(Array.isArray(n.concepts) ? n.concepts.map((c) => {
       const found = conceptCatalog.find((cc) => cc.id === c.id);
       return found ? found.name : '';
     }) : [])];
+  if (typeFilter && String(n.type || 'note') !== typeFilter) return false;
   return fields.some((f) => String(f ?? '').toLowerCase().includes(q));
 }
 
@@ -335,7 +345,12 @@ function matchesQuery(n, q) {
  */
 function applySearch() {
   const q = searchQuery.trim().toLowerCase();
-  const list = q ? notesCache.filter((n) => matchesQuery(n, q)) : notesCache;
+  let list = q ? notesCache.filter((n) => matchesQuery(n, q)) : notesCache.slice();
+  const f = listFilters;
+  if (f.project) list = list.filter((n) => String(n.project || '') === f.project);
+  if (f.book) list = list.filter((n) => String(n.book || '') === f.book);
+  if (f.dateFrom) list = list.filter((n) => String(n.date || '') >= f.dateFrom);
+  if (f.dateTo) list = list.filter((n) => String(n.date || '') <= f.dateTo);
   els.count.textContent = q
     ? `匹配 ${list.length} / 共 ${notesCache.length} 条`
     : `${notesCache.length} 条`;
@@ -352,12 +367,12 @@ function applySearch() {
 }
 
 /* ── 编辑器：动态类型字段 ── */
-function buildTypeFields(rec) {
+function buildTypeFields(rec, typeDef = currentType) {
   const wrap = els.typeFields;
   wrap.innerHTML = '';
   const existing = rec || {};
   const meta = existing.meta || {};
-  for (const f of currentType.fields) {
+  for (const f of typeDef.fields) {
     const metaInfo = NoteTypes.fieldMeta(f);
     const field = document.createElement('label');
     field.className = 'field';
@@ -385,9 +400,9 @@ function buildTypeFields(rec) {
   }
 }
 
-function collectTypeFields(rec) {
+function collectTypeFields(rec, typeDef = currentType) {
   const out = { meta: { ...((rec && rec.meta) || {}) } };
-  for (const f of currentType.fields) {
+  for (const f of typeDef.fields) {
     const el = $(`f-${f}`);
     if (!el) continue;
     if (f === 'book') out.book = el.value.trim();
@@ -400,18 +415,21 @@ function collectTypeFields(rec) {
 
 function openEditor(rec) {
   editingId = rec ? rec.id : null;
+  const effType = (currentType.key === 'all' && rec) ? NoteTypes.getType(rec.type || 'note') : currentType;
+  const eff = effType || currentType;
   photoData = rec?.imageData || '';
   const verb = rec ? '编辑' : '写';
-  els.editorTitle.textContent = `${verb}${currentType.label}`;
+  els.editorTitle.textContent = `${verb}${eff.label}`;
   els.fDate.value = rec?.date || todayStr();
   els.fTitle.value = rec?.title || '';
   els.fTags.value = (rec?.tags || []).join(', ');
   els.fContent.value = rec?.content || '';
+  els.fProject.value = rec?.project || '';
   els.mdPreview.hidden = true;
   els.fReader.value = rec?.readerNote || '';
   els.fAi.value = rec?.aiNote || '';
   selectedConcepts = new Map((rec?.concepts || []).map((c) => [String(c.id || ''), String(c.source || 'user')]).filter(([id]) => id));
-  buildTypeFields(rec);
+  buildTypeFields(rec, eff);
   renderConceptSelector();
   if (photoData) {
     els.photoPreview.src = photoData;
@@ -436,21 +454,23 @@ function closeEditor() {
 
 async function saveRecord() {
   const existing = editingId ? notesCache.find((n) => n.id === editingId) : null;
+  const effType = (currentType.key === 'all') ? (NoteTypes.getType(existing?.type || 'note') || currentType) : currentType;
   const title = els.fTitle.value.trim();
   const date = els.fDate.value || todayStr();
   const rec = {
     ...existing,                       // 保留未编辑的其它字段
     id: editingId || undefined,
-    type: currentType.key,
+    type: (currentType.key === 'all' ? (existing?.type || 'note') : currentType.key),
     title: title || `${currentType.label} · ${date}`,
     date,
     tags: parseTagsInput(els.fTags.value),
     concepts: [...selectedConcepts.entries()].map(([id, source]) => ({ id, source: source || 'user' })),
     content: els.fContent.value.trim(),
+    project: els.fProject.value.trim(),
     readerNote: els.fReader.value.trim(),
     aiNote: els.fAi.value.trim(),
     imageData: photoData,
-    ...collectTypeFields(existing),    // book/pages/meta 按类型字段覆盖
+    ...collectTypeFields(existing, effType),    // book/pages/meta 按类型字段覆盖
   };
   await addNote(rec);
   const savedId = editingId;
@@ -501,7 +521,7 @@ async function askAI() {
 
 /* ── 类型管理面板 ── */
 function renderTypeManager() {
-  const rows = NoteTypes.getTypes().map((t) => {
+  const rows = NoteTypes.getTypes(false).map((t) => {
     const tag = t.builtin
       ? '<span class="tag">内置</span>'
       : `<button class="btn ghost small danger" data-rm="${esc(t.key)}">删除</button>`;
@@ -643,7 +663,7 @@ async function openBackupPanel() {
   const books = await getAllBooks();
   els.backupBook.innerHTML = '<option value="">（选择书）</option>' +
     books.map((b) => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
-  els.backupType.innerHTML = NoteTypes.getTypes()
+  els.backupType.innerHTML = NoteTypes.getTypes(false)
     .map((t) => `<option value="${esc(t.key)}">${t.icon} ${esc(t.label)}</option>`).join('');
   if (currentType) els.backupType.value = currentType.key;
   els.backupPanel.hidden = false;
@@ -720,7 +740,7 @@ async function renderExportSelects() {
   const books = await getAllBooks();
   els.exportBook.innerHTML = '<option value="">（选择书）</option>' +
     books.map((b) => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
-  els.exportType.innerHTML = NoteTypes.getTypes()
+  els.exportType.innerHTML = NoteTypes.getTypes(false)
     .map((t) => `<option value="${esc(t.key)}">${t.icon} ${esc(t.label)}</option>`).join('');
   if (currentType) els.exportType.value = currentType.key;  // 默认选中当前类型
 }
@@ -842,6 +862,69 @@ els.mdToolbar.addEventListener('click', (e) => {
   if (btn) onMdBtn(btn.getAttribute('data-md'));
 });
 els.mdPreviewToggle.addEventListener('click', toggleMdPreview);
+
+/* ── 筛选栏（项目/书名/日期区间 + 快捷；与搜索 AND 叠加）────────────── */
+
+async function initFilterBar() {
+  const projects = await getAllProjects();
+  els.filterProject.innerHTML = '<option value="">全部项目</option>' +
+    projects.map((p2) => `<option value="${esc(p2)}">${esc(p2)}</option>`).join('');
+  const books = await getAllBooks();
+  els.filterBook.innerHTML = '<option value="">全部书名</option>' +
+    books.map((b) => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
+  // 「全部」伪类型页：追加类型筛选 chips
+  if (currentType.key === 'all') {
+    const chips = document.createElement('div');
+    chips.className = 'filter-type-chips';
+    chips.innerHTML = ['all', 'note', 'diary', 'log', 'memo']
+      .map((k) => { const tt = NoteTypes.getType(k); return `<button type="button" class="btn ghost small type-chip${k === 'all' ? ' active' : ''}" data-type-chip="${k}">${tt ? tt.icon + ' ' + esc(tt.label) : k}</button>`; }).join('');
+    els.filterBar.appendChild(chips);
+    chips.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-type-chip]');
+      if (!btn) return;
+      const k = btn.getAttribute('data-type-chip');
+      typeFilter = k === 'all' ? '' : k;
+      chips.querySelectorAll('.type-chip').forEach((b2) => b2.classList.toggle('active', b2 === btn));
+      applySearch();
+    });
+  }
+}
+
+function readFilters() {
+  listFilters = {
+    project: els.filterProject.value || '',
+    book: els.filterBook.value || '',
+    dateFrom: els.filterFrom.value || '',
+    dateTo: els.filterTo.value || '',
+  };
+  applySearch();
+}
+
+function applyQuickFilter(kind) {
+  const today = todayStr();
+  if (kind === 'month') {
+    els.filterFrom.value = today.slice(0, 8) + '01';
+    els.filterTo.value = today;
+  } else if (kind === 'year') {
+    els.filterFrom.value = today.slice(0, 4) + '-01-01';
+    els.filterTo.value = today;
+  } else {
+    els.filterFrom.value = '';
+    els.filterTo.value = '';
+  }
+  readFilters();
+}
+
+let typeFilter = '';   // 「全部」页的类型筛选（'' = 全部）
+
+els.filterProject.addEventListener('change', readFilters);
+els.filterBook.addEventListener('change', readFilters);
+els.filterFrom.addEventListener('change', readFilters);
+els.filterTo.addEventListener('change', readFilters);
+els.filterBar.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-quick]');
+  if (btn) applyQuickFilter(btn.getAttribute('data-quick'));
+});
 
 /* ── 事件绑定 ── */
 els.newBtn.addEventListener('click', () => openEditor());
@@ -1007,8 +1090,10 @@ els.list.addEventListener('click', async (event) => {
   renderHeader();
   document.title = `${currentType.label} · 读书笔记`;
   renderMdToolbar();
+  initFilterBar();
   refresh(); // applySearch() 负责空状态文案（含搜索无结果态）
   loadConceptCatalog();
+  getAllProjects().then((ps) => { els.projectList.innerHTML = ps.map((p2) => `<option value="${esc(p2)}"></option>`).join(''); });
   // 编辑直入：note.html「✏️ 编辑」→ type.html?t=<类型>&edit=<id>（编辑器与创建一致，保存回跳详情页）
   const editId = new URLSearchParams(location.search).get('edit');
   if (editId) {

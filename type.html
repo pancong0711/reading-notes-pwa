@@ -30,17 +30,27 @@
     </section>
 
     <!-- 工具栏 -->
+    <div class="filter-bar" id="filter-bar">
+      <select id="filter-project"><option value="">全部项目</option></select>
+      <select id="filter-book"><option value="">全部书名</option></select>
+      <input type="date" id="filter-from" title="起始日期">
+      <span class="muted">～</span>
+      <input type="date" id="filter-to" title="结束日期">
+      <button type="button" class="btn ghost small" data-quick="month">本月</button>
+      <button type="button" class="btn ghost small" data-quick="year">今年</button>
+      <button type="button" class="btn ghost small" data-quick="clear">清空</button>
+    </div>
     <div class="toolbar">
       <input id="search-input" type="search" placeholder="搜索标题/内容/读者注/AI注…">
       <span class="count" id="record-count"></span>
       <div class="toolbar-actions">
         <button class="btn primary" id="new-btn" type="button">＋ 写一篇</button>
-        <button class="btn ghost" id="sync-btn" type="button">⇄ 从电脑导入</button>
+        <button class="btn ghost" id="sync-btn" type="button" title="拉取本网页所在服务器的 export.json（本机/局域网打开时=电脑最新数据）">⇄ 从服务器导入</button>
         <button class="btn ghost" id="manage-btn" type="button">管理类型</button>
         <button class="btn ghost" id="tag-manage-btn" type="button">整理标签</button>
         <button class="btn ghost" id="export-btn" type="button">⬇ 备份 / 迁移包</button>
         <button class="btn ghost" id="export-pdf-btn" type="button">导出/生成</button>
-        <button class="btn ghost" id="import-btn" type="button">导入 JSON</button>
+        <button class="btn ghost" id="import-btn" type="button" title="从本机选择迁移包/笔记包 JSON（跨终端互传）">📥 导入文件</button>
         <input type="file" id="import-file" accept=".json,application/json" hidden>
       </div>
     </div>
@@ -78,6 +88,11 @@
 
       <label class="field">标签
         <input id="f-tags" type="text" placeholder="逗号分隔，如：光学, 生活篇">
+      </label>
+
+      <label class="field">项目（可选）
+        <input id="f-project" type="text" list="project-list" placeholder="因项目而读时填写，如：磁探伤-调研">
+        <datalist id="project-list"></datalist>
       </label>
 
       <label class="field">内容

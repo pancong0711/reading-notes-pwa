@@ -18,6 +18,8 @@
 
   /* 内置类型：不可删除，可改显示名/图标（改后存自定义覆盖层） */
   var BUILTIN = [
+    { key: 'all',   label: '全部记录', icon: '🗂️', fields: [], builtin: true, pseudo: true,
+      hint: '跨类型浏览，可按类型筛选' },
     { key: 'note',  label: '阅读笔记', icon: '📖', fields: ['book', 'pages'], builtin: true,
       hint: '拍书页 + 读者注 + AI注' },
     { key: 'diary', label: '日记',     icon: '📓', fields: [], builtin: true,
@@ -66,9 +68,10 @@
 
   /* ── 查询 ── */
 
-  /** 全部类型：内置（按定义顺序）+ 自定义（追加在后） */
-  function getTypes() {
-    return BUILTIN.concat(loadCustom());
+  /** 全部类型：内置（按定义顺序）+ 自定义（追加在后）；includePseudo=false 时排除「全部」伪类型 */
+  function getTypes(includePseudo) {
+    var list = BUILTIN.concat(loadCustom());
+    return includePseudo ? list : list.filter(function (t) { return !t.pseudo; });
   }
 
   function getType(key) {

@@ -37,6 +37,7 @@ function typeLabel(key) {
 function metaLine(n) {
   const parts = [];
   if (n.date) parts.push(esc(n.date));
+  if (n.project) parts.push(`📁 ${esc(n.project)}`);
   if (n.book) parts.push(`《${esc(n.book)}》`);
   if (n.pages) parts.push(`第 ${esc(n.pages)} 页`);
   if (Array.isArray(n.tags) && n.tags.length) parts.push(n.tags.map((t) => `#${esc(t)}`).join(' '));
