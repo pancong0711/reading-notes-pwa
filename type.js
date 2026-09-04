@@ -59,6 +59,15 @@ const els = {
   tFields: $('t-fields'),
   manageClose: $('type-manage-close'),
   exportBtn: $('export-btn'),
+  backupPanel: $('backup-panel'),
+  backupBook: $('backup-book'),
+  backupType: $('backup-type'),
+  backupFrom: $('backup-from'),
+  backupTo: $('backup-to'),
+  backupImages: $('backup-images'),
+  backupStats: $('backup-stats'),
+  backupExportBtn: $('backup-export-btn'),
+  backupClose: $('backup-close'),
   exportPdfBtn: $('export-pdf-btn'),
   exportPanel: $('export-panel'),
   exportBook: $('export-book'),
@@ -561,7 +570,7 @@ async function downloadBackup(prefix = '读书笔记-导入前备份') {
 /**
  * 打开导入对比对话框：先 diff，展示统计与策略，确认后执行。
  * @param {object} pkg 导入包
- * @param {string} source 来源描述（同步 CLI / 导入文件）
+ * @param {string} source 来源描述（从电脑导入 / 导入文件）
  */
 async function openImportDialog(pkg, source) {
   const diff = await diffNotePackage(pkg);
@@ -581,7 +590,7 @@ function closeImportDialog() {
 }
 
 /**
- * 同步 CLI：拉取服务器上的 export.json（由 `cli sync` 生成），
+ * 从电脑导入：拉取服务器上的 export.json（由 `cli sync` 生成），
  * 弹出差异对比对话框（可合并/仅新增/完整替换），确认后执行。
  * fetch 用 no-store 并依赖 SW 对 export.json 的 network-first，避免旧缓存。
  */
@@ -593,7 +602,7 @@ async function syncFromCli() {
   const pkg = await resp.json();
   const list = Array.isArray(pkg.notes) ? pkg.notes : [];
   if (!list.length) throw new Error('导出包为空');
-  await openImportDialog(pkg, '同步 CLI');
+  await openImportDialog(pkg, '从电脑导入');
 }
 
 async function doImport(file) {
@@ -625,15 +634,74 @@ async function confirmImport() {
   }
 }
 
-async function doExport() {
-  const pkg = await exportNotePackage();
-  const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `读书笔记-${todayStr()}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  toast('已导出笔记包 JSON');
+/* ── 备份 / 迁移包（需求：PWA 图片自包含与同步语义）────────────── */
+
+/** 打开面板：填充书/类型下拉与统计行 */
+async function openBackupPanel() {
+  const books = await getAllBooks();
+  els.backupBook.innerHTML = '<option value="">（选择书）</option>' +
+    books.map((b) => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
+  els.backupType.innerHTML = NoteTypes.getTypes()
+    .map((t) => `<option value="${esc(t.key)}">${t.icon} ${esc(t.label)}</option>`).join('');
+  if (currentType) els.backupType.value = currentType.key;
+  els.backupPanel.hidden = false;
+  await refreshBackupStats();
+}
+
+function readBackupScope() {
+  const scope = document.querySelector('input[name="backup-scope"]:checked')?.value || 'all';
+  return {
+    scope,
+    book: els.backupBook.value || '',
+    type: els.backupType.value || '',
+    dateFrom: els.backupFrom.value || '',
+    dateTo: els.backupTo.value || '',
+    label: scope === 'book' ? (els.backupBook.selectedOptions[0]?.textContent || '某本书')
+      : scope === 'type' ? (NoteTypes.getType(els.backupType.value)?.label || '某类型')
+      : scope === 'date' ? scopeLabel('date', { dateFrom: els.backupFrom.value, dateTo: els.backupTo.value })
+      : '全部',
+  };
+}
+
+/** 统计行：N 条记录 · M 张图片（范围内引用去重） */
+async function refreshBackupStats() {
+  const scope = readBackupScope();
+  const all = await getAllNotes();
+  const list = filterNotesByScope(all, scope);
+  const imgCount = new Set();
+  for (const n of list) for (const img of (n.images || [])) imgCount.add(String(img));
+  const withImg = list.filter((n) => (n.images && n.images.length) || n.imageData).length;
+  els.backupStats.textContent = `共 ${list.length} 条记录 ｜ ${imgCount.size} 张引用图片（${withImg} 条带图）`
+    + (els.backupImages.checked ? ' ｜ ☑ 含图片' : ' ｜ 不含图片');
+}
+
+/** 导出迁移包：范围过滤 → exportNotePackage({notes, includeImages}) → 下载 */
+async function doBackupExport() {
+  try {
+    const scope = readBackupScope();
+    const all = await getAllNotes();
+    const list = filterNotesByScope(all, scope);
+    if (!list.length) { toast('范围内没有记录，无法导出'); return; }
+    const includeImages = els.backupImages.checked;
+    els.backupExportBtn.disabled = true;
+    els.backupExportBtn.textContent = '打包中…';
+    const pkg = await exportNotePackage({ notes: list, includeImages });
+    const nImg = pkg.imageFiles ? Object.keys(pkg.imageFiles).length : 0;
+    const fileLabel = String(scope.label).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-');
+    const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `读书笔记-迁移包-${fileLabel}-${todayStr().replace(/-/g, '')}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    els.backupPanel.hidden = true;
+    toast(`已导出迁移包：${list.length} 条${includeImages ? `（含图片 ${nImg} 张）` : ''}`);
+  } catch (e) {
+    toast(`导出失败：${e.message}`, 4200);
+  } finally {
+    els.backupExportBtn.disabled = false;
+    els.backupExportBtn.textContent = '⬇ 导出笔记包';
+  }
 }
 
 /* ── 导出 / 生成（打印草稿 / 下载书稿 md）────────────── */
@@ -842,7 +910,13 @@ els.tagList.addEventListener('click', async (e) => {
   }
 });
 
-els.exportBtn.addEventListener('click', doExport);
+els.exportBtn.addEventListener('click', openBackupPanel);
+els.backupClose.addEventListener('click', () => { els.backupPanel.hidden = true; });
+els.backupExportBtn.addEventListener('click', doBackupExport);
+['backup-book', 'backup-type', 'backup-from', 'backup-to'].forEach((id) => {
+  document.getElementById(id).addEventListener('change', refreshBackupStats);
+});
+els.backupImages.addEventListener('change', refreshBackupStats);
 els.exportPdfBtn.addEventListener('click', async () => {
   await renderExportSelects();
   els.exportPanel.hidden = false;
@@ -866,7 +940,7 @@ els.syncBtn.addEventListener('click', async () => {
     toast(`同步失败：${err.message}`, 4200);
   } finally {
     els.syncBtn.disabled = false;
-    els.syncBtn.textContent = '⇄ 同步 CLI';
+    els.syncBtn.textContent = '⇄ 从电脑导入';
   }
 });
 

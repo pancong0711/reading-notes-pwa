@@ -35,10 +35,10 @@
       <span class="count" id="record-count"></span>
       <div class="toolbar-actions">
         <button class="btn primary" id="new-btn" type="button">＋ 写一篇</button>
-        <button class="btn ghost" id="sync-btn" type="button">⇄ 同步 CLI</button>
+        <button class="btn ghost" id="sync-btn" type="button">⇄ 从电脑导入</button>
         <button class="btn ghost" id="manage-btn" type="button">管理类型</button>
         <button class="btn ghost" id="tag-manage-btn" type="button">整理标签</button>
-        <button class="btn ghost" id="export-btn" type="button">导出 JSON</button>
+        <button class="btn ghost" id="export-btn" type="button">⬇ 备份 / 迁移包</button>
         <button class="btn ghost" id="export-pdf-btn" type="button">导出/生成</button>
         <button class="btn ghost" id="import-btn" type="button">导入 JSON</button>
         <input type="file" id="import-file" accept=".json,application/json" hidden>
@@ -143,6 +143,27 @@
         <button class="btn primary" type="submit">添加</button>
         <button class="btn ghost" id="type-manage-close" type="button">关闭</button>
       </form>
+    </div>
+
+    <!-- 备份 / 迁移包面板（范围 + 含图片；纯 PWA 互传 / 回传电脑 / 备份） -->
+    <div id="backup-panel" class="type-manage" hidden>
+      <h2>备份 / 迁移包</h2>
+      <p class="muted">导出本机数据为笔记包 JSON，三种用法：<b>① 纯 PWA 多端互传</b>（另一台设备「导入 JSON」即可，勾选含图片则照片随包迁移）；<b>② 回传电脑</b>（CLI <code>import-json</code> 写入 md 体系）；<b>③ 本地备份</b>。</p>
+      <div class="export-scope">
+        <label class="export-opt"><input type="radio" name="backup-scope" value="all" checked><span>全部记录</span></label>
+        <label class="export-opt"><input type="radio" name="backup-scope" value="book"><span>某本书</span>
+          <select id="backup-book"></select></label>
+        <label class="export-opt"><input type="radio" name="backup-scope" value="type"><span>某类型</span>
+          <select id="backup-type"></select></label>
+        <label class="export-opt"><input type="radio" name="backup-scope" value="date"><span>日期区间</span>
+          <input type="date" id="backup-from"><span class="muted">～</span><input type="date" id="backup-to"></label>
+        <label class="export-opt"><input type="checkbox" id="backup-images" checked><span>☑ 含图片（默认开；图片随包迁移，换机/离线均可显示）</span></label>
+      </div>
+      <p class="muted" id="backup-stats"></p>
+      <div class="editor-actions">
+        <button class="btn primary" id="backup-export-btn" type="button">⬇ 导出笔记包</button>
+        <button class="btn ghost" id="backup-close" type="button">关闭</button>
+      </div>
     </div>
 
     <!-- 导出/生成面板（打印草稿 / 下载书稿 md） -->

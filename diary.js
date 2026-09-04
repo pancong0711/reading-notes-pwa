@@ -7,7 +7,7 @@
   'use strict';
 
   var DB_NAME = 'reading-notes';   // 数据库名，与数据层约定一致
-  var DB_VERSION = 5;              // 与 data.js 保持一致（schema 统一：v4 concept_catalog、v5 graph_local store）
+  var DB_VERSION = 6;              // 与 data.js 保持一致（schema 统一：v4 concept_catalog、v5 graph_local、v6 image_store）
   var STORE = 'notes';             // 对象仓库名
   var TYPE_DIARY = 'diary';        // 日记类型标记
 
@@ -46,6 +46,10 @@
         // 否则先开库的一方把库版本顶上去后，后开的一方不再触发 onupgradeneeded 而缺 store
         if (!db.objectStoreNames.contains('graph_local')) {
           db.createObjectStore('graph_local', { keyPath: 'id' });
+        }
+        // image_store 仓库（v6 图片自包含仓）：与 data.js 同 schema（keyPath: path）
+        if (!db.objectStoreNames.contains('image_store')) {
+          db.createObjectStore('image_store', { keyPath: 'path' });
         }
       };
       req.onsuccess = function () { resolve(req.result); };

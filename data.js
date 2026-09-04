@@ -39,11 +39,12 @@
  */
 
 const DB_NAME = 'reading-notes';
-const DB_VERSION = 5;   // v2：增加 type 索引；v3：books store；v4：concept_catalog store；v5：graph_local store（本机重算图谱，diary.js 同步升级）
+const DB_VERSION = 6;   // v2：type 索引；v3：books store；v4：concept_catalog store；v5：graph_local store；v6：image_store（图片自包含仓，path→Blob，diary.js 同步升级）
 const STORE = 'notes';
 const BOOKS_STORE = 'books';
 const CONCEPTS_STORE = 'concept_catalog';   // 概念目录工作副本，keyPath: id
 const GRAPH_LOCAL_STORE = 'graph_local';    // 本机重算 union 图谱存档，keyPath: id
+const IMAGE_STORE = 'image_store';          // 图片自包含仓（迁移包导入/ SW 网络回填），keyPath: path
 
 let _dbPromise = null;
 let _noteSeq = 0;   // 本地新记录 id 递增序号，避免同一毫秒内并发/连续新增时 id 冲突
@@ -86,6 +87,10 @@ function openDB() {
       if (!db.objectStoreNames.contains(GRAPH_LOCAL_STORE)) {
         // v5 新增：本机重算 union 图谱存档（diary.js 同步升级补建，两处 schema 必须一致）
         db.createObjectStore(GRAPH_LOCAL_STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(IMAGE_STORE)) {
+        // v6 新增：图片自包含仓（迁移包导入 / SW 网络回填，diary.js 同步升级补建）
+        db.createObjectStore(IMAGE_STORE, { keyPath: 'path' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -356,6 +361,9 @@ export async function deleteTag(tag) {
  * @returns {Promise<number>}  导入的笔记数量
  */
 export async function importNotePackage(json) {
+  if (json && !Array.isArray(json) && json.imageFiles) {
+    await ingestImageFiles(json.imageFiles);   // 迁移包图片落仓（渲染经 SW 供图）
+  }
   const list = Array.isArray(json)
     ? json
     : json && Array.isArray(json.notes)
@@ -431,6 +439,9 @@ export async function diffNotePackage(json) {
  * @returns {Promise<{applied:number, diff:object}>}
  */
 export async function mergeNotePackage(json, strategy) {
+  if (json && !Array.isArray(json) && json.imageFiles) {
+    await ingestImageFiles(json.imageFiles);   // 迁移包图片落仓（两种策略都落，不依赖记录合并结果）
+  }
   const list = Array.isArray(json)
     ? json
     : json && Array.isArray(json.notes) ? json.notes : [];
@@ -459,9 +470,16 @@ export async function mergeNotePackage(json, strategy) {
  * 导出笔记包（含书籍元信息，往返一致）。
  * @returns {Promise<{notes: Array, books: Array, exportedAt: string, schemaVersion: number}>}
  */
-export async function exportNotePackage() {
-  const [notes, books] = await Promise.all([getAllNotes(), getAllBooksRaw()]);
-  return { notes, books, exportedAt: new Date().toISOString(), schemaVersion: 2 };
+export async function exportNotePackage(opts = {}) {
+  const { notes: prefiltered, includeImages = false, fetcher } = opts;
+  const [allNotes, books] = await Promise.all([getAllNotes(), getAllBooksRaw()]);
+  const notes = Array.isArray(prefiltered) ? prefiltered : allNotes;
+  const pkg = { notes, books, exportedAt: new Date().toISOString(), schemaVersion: 2 };
+  if (includeImages) {
+    const { imageFiles } = await collectImageFiles(notes, fetcher);
+    if (Object.keys(imageFiles).length) pkg.imageFiles = imageFiles;
+  }
+  return pkg;
 }
 
 /**
@@ -929,6 +947,120 @@ export async function clearLocalGraph() {
   });
 }
 
+/* ══════════════════════════════════════════════════════════
+   图片自包含仓（需求：PWA 图片自包含与同步语义）
+   image_store：path → Blob。两条写入来源：
+     · 迁移包导入（pkg.imageFiles 的 dataURL 落库）
+     · SW 网络回填（/assets/* 命中网络后写回，见 sw.js）
+   读取：SW fetch 拦截 /assets/*（离线/无服务器场景图片仍可达）。
+   ══════════════════════════════════════════════════════════ */
+
+/** dataURL → Blob（imageFiles 摄取用） */
+function _dataUrlToBlob(dataUrl) {
+  const m = /^data:([^;,]+)?(;base64)?,(.*)$/.exec(String(dataUrl));
+  if (!m) return null;
+  const mime = m[1] || 'application/octet-stream';
+  if (!m[2]) {
+    try { return new Blob([decodeURIComponent(m[3])], { type: mime }); } catch { return null; }
+  }
+  const bin = atob(m[3]);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return new Blob([buf], { type: mime });
+}
+
+/** 写入单张图片（path → Blob/dataURL） */
+export async function putImageFile(path, data) {
+  const p = String(path || '');
+  if (!p) throw new Error('putImageFile：path 缺失');
+  const blob = data instanceof Blob ? data : _dataUrlToBlob(data);
+  if (!blob) throw new Error('putImageFile：数据无法解析为 Blob（需 Blob 或 dataURL）');
+  const db = await openDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(IMAGE_STORE, 'readwrite');
+    tx.objectStore(IMAGE_STORE).put({ path: p, blob, updatedAt: Date.now() });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+  return p;
+}
+
+/** 读取单张图片（无则 null） */
+export async function getImageFile(path) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(IMAGE_STORE, 'readonly').objectStore(IMAGE_STORE).get(String(path));
+    req.onsuccess = () => resolve(req.result ? req.result.blob : null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * 摄取迁移包的 imageFiles（{ 'assets/…': dataURL }）→ 逐条写入 image_store。
+ * @returns {Promise<number>} 摄取张数
+ */
+export async function ingestImageFiles(imageFiles) {
+  if (!imageFiles || typeof imageFiles !== 'object') return 0;
+  let n = 0;
+  for (const [path, data] of Object.entries(imageFiles)) {
+    try { await putImageFile(path, data); n++; } catch { /* 单张失败不阻断 */ }
+  }
+  return n;
+}
+
+/**
+ * 收集范围内笔记引用的图片 → imageFiles 映射（导出迁移包含图）。
+ * @param {Array<object>} notes  已按范围过滤的记录
+ * @param {Function} [fetcher]  取图函数（默认 fetch；可注入便于单测）——返回 Response-like
+ * @returns {Promise<{imageFiles: object, missing: string[]}>}
+ */
+export async function collectImageFiles(notes, fetcher) {
+  const f = fetcher || (typeof fetch === 'function' ? fetch : null);
+  const paths = [];
+  const seen = new Set();
+  for (const n of notes || []) {
+    for (const img of Array.isArray(n.images) ? n.images : []) {
+      const p = String(img);
+      if (p && !seen.has(p)) { seen.add(p); paths.push(p); }
+    }
+  }
+  const imageFiles = {};
+  const missing = [];
+  for (const p of paths) {
+    try {
+      // 本地仓优先（SW 场景下 fetch 本身会走拦截，但显式查仓可离线且省请求）
+      const local = await getImageFile(p);
+      if (local) {
+        imageFiles[p] = await _blobToDataUrl(local);
+        continue;
+      }
+      if (!f) { missing.push(p); continue; }
+      const resp = await f(p);
+      if (!resp || !resp.ok) { missing.push(p); continue; }
+      const blob = await resp.blob();
+      imageFiles[p] = await _blobToDataUrl(blob);
+    } catch {
+      missing.push(p);
+    }
+  }
+  return { imageFiles, missing };
+}
+
+function _blobToDataUrl(blob) {
+  // 浏览器：FileReader；node 测试环境无 FileReader → arrayBuffer + Buffer 回退
+  if (typeof FileReader === 'function') {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(blob);
+    });
+  }
+  return blob.arrayBuffer().then((buf) =>
+    `data:${blob.type || 'application/octet-stream'};base64,${Buffer.from(buf).toString('base64')}`);
+}
+
 /* 挂到 window，便于页面与控制台调用 */
 window.importNotePackage = importNotePackage;
 window.exportNotePackage = exportNotePackage;
@@ -954,6 +1086,8 @@ window.importConceptCatalog = importConceptCatalog;
 window.importConceptCatalogFromGraph = importConceptCatalogFromGraph;
 window.exportConceptCatalogYaml = exportConceptCatalogYaml;
 window.getDomainNameMap = getDomainNameMap;
+window.ingestImageFiles = ingestImageFiles;
+window.collectImageFiles = collectImageFiles;
 window.saveLocalGraph = saveLocalGraph;
 window.getLocalGraph = getLocalGraph;
 window.clearLocalGraph = clearLocalGraph;
