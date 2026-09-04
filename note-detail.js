@@ -12,6 +12,7 @@
  * 纯字符串拼接、无 DOM 依赖：浏览器与 node 测试均可加载。
  */
 import { renderMarkdown } from './vendor/markdown-lite.js';
+import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -75,4 +76,17 @@ export function renderNoteDetail(note, catalogById) {
   return parts.join('') || '<p class="muted">（无更多内容）</p>';
 }
 
-export default { renderNoteDetail };
+/**
+ * 渲染详情并插入容器 + 对容器内公式定点排版（MathJax 未就绪时公式保持原文可见）。
+ * @param {HTMLElement} el  容器元素（innerHTML 会被覆盖）
+ * @param {object} note  记录
+ * @param {object} [catalogById]  概念 id → {name} 映射
+ */
+export async function renderNoteDetailInto(el, note, catalogById) {
+  el.innerHTML = renderNoteDetail(note, catalogById);
+  if (el.querySelector) {
+    try { await typesetInto(el); } catch { /* 排版失败不影响展示 */ }
+  }
+}
+
+export default { renderNoteDetail, renderNoteDetailInto, typesetInto };

@@ -6,6 +6,7 @@
  *   - 书过滤 / 搜索 / 域显隐（图例）保留
  */
 import { renderNoteDetail } from './note-detail.js';
+import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
 (() => {
   'use strict';
 
@@ -366,6 +367,8 @@ import { renderNoteDetail } from './note-detail.js';
     panelBody.innerHTML = html;
     panelEl.hidden = false;
     panelEl.classList.add('open');
+    // 公式定点排版（MathJax 惰性加载；失败静默，公式保持原文）
+    typesetInto(panelBody).catch(function () {});
   }
   function closePanel() {
     panelEl.classList.remove('open');

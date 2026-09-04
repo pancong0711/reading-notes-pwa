@@ -21,8 +21,10 @@ import {
   renameTag,
   deleteTag,
 } from './data.js';
-import { renderNoteDetail } from './note-detail.js';
+import { renderNoteDetailInto } from './note-detail.js';
 import { filterNotesByScope, buildPrintHtml, buildMarkdownDraft, scopeLabel } from './print-export.js';
+import { BUTTONS, wrapSelection, renderPreview } from './md-toolbar.js';
+import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -81,6 +83,9 @@ const els = {
   fTags: $('f-tags'),
   fTitle: $('f-title'),
   fContent: $('f-content'),
+  mdToolbar: $('md-toolbar'),
+  mdPreview: $('md-preview'),
+  mdPreviewToggle: $('md-preview-toggle'),
   fReader: $('f-reader'),
   fAi: $('f-ai'),
   askAiBtn: $('ask-ai-btn'),
@@ -393,6 +398,7 @@ function openEditor(rec) {
   els.fTitle.value = rec?.title || '';
   els.fTags.value = (rec?.tags || []).join(', ');
   els.fContent.value = rec?.content || '';
+  els.mdPreview.hidden = true;
   els.fReader.value = rec?.readerNote || '';
   els.fAi.value = rec?.aiNote || '';
   selectedConcepts = new Map((rec?.concepts || []).map((c) => [String(c.id || ''), String(c.source || 'user')]).filter(([id]) => id));
@@ -415,6 +421,7 @@ function closeEditor() {
   els.photoInput.value = '';
   els.photoPreview.hidden = true;
   els.fTags.value = '';
+  els.mdPreview.hidden = true;
   selectedConcepts = new Map();
 }
 
@@ -734,6 +741,38 @@ async function doDownloadMd() {
   toast('已下载书稿 markdown');
 }
 
+/* ── 富文本工具栏 / 预览（A1：md-toolbar 纯函数驱动）────────────── */
+
+function renderMdToolbar() {
+  els.mdToolbar.innerHTML = BUTTONS.map((b) =>
+    `<button type="button" data-md="${esc(b.key)}" title="${esc(b.title)}">${esc(b.label)}</button>`).join('');
+}
+
+function onMdBtn(key) {
+  const cfg = BUTTONS.find((b) => b.key === key);
+  if (!cfg || !els.fContent) return;
+  const t = els.fContent;
+  const r = wrapSelection(t.value, t.selectionStart || 0, t.selectionEnd || 0, cfg);
+  t.value = r.value;
+  t.focus();
+  t.setSelectionRange(r.selStart, r.selEnd);
+}
+
+async function toggleMdPreview() {
+  const show = els.mdPreview.hidden;
+  els.mdPreview.hidden = !show;
+  if (show) {
+    els.mdPreview.innerHTML = renderPreview(els.fContent.value || '');
+    try { await typesetInto(els.mdPreview); } catch (e) { /* 公式排版失败不阻断预览 */ }
+  }
+}
+
+els.mdToolbar.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-md]');
+  if (btn) onMdBtn(btn.getAttribute('data-md'));
+});
+els.mdPreviewToggle.addEventListener('click', toggleMdPreview);
+
 /* ── 事件绑定 ── */
 els.newBtn.addEventListener('click', () => openEditor());
 els.emptyNewBtn.addEventListener('click', () => openEditor());
@@ -881,15 +920,15 @@ els.list.addEventListener('click', async (event) => {
     return;
   }
 
-  // 点击卡片主体 → 展开/收起详情（共享渲染组件：markdown 正文 + 读者注/AI注 + 图片可达）
+  // 点击卡片主体 → 展开/收起详情（共享渲染组件：markdown 正文 + 读者注/AI注 + 图片可达 + 公式排版）
   const expanded = card.classList.toggle('expanded');
   if (expanded && !card.querySelector('.note-detail')) {
     const detail = document.createElement('div');
     detail.className = 'note-detail';
     const catalogById = {};
     conceptCatalog.forEach((cc) => { catalogById[cc.id] = cc; });
-    detail.innerHTML = renderNoteDetail(note, catalogById);
     card.appendChild(detail);
+    await renderNoteDetailInto(detail, note, catalogById);
   } else if (!expanded) {
     card.querySelector('.note-detail')?.remove();
   }
@@ -901,6 +940,7 @@ els.list.addEventListener('click', async (event) => {
   currentType = NoteTypes.getType(key) || NoteTypes.getType('note');
   renderHeader();
   document.title = `${currentType.label} · 读书笔记`;
+  renderMdToolbar();
   refresh(); // applySearch() 负责空状态文案（含搜索无结果态）
   loadConceptCatalog();
 })();

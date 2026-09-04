@@ -81,7 +81,12 @@
       </label>
 
       <label class="field">内容
-        <textarea id="f-content" rows="3" placeholder="写下内容……"></textarea>
+        <div class="md-editor">
+          <div class="md-toolbar" id="md-toolbar" role="toolbar" aria-label="文本格式"></div>
+          <textarea id="f-content" rows="3" placeholder="写下内容……（支持 **粗体**、*斜体*、==高亮==、公式 $E=mc^2$、$$…$$ 等）"></textarea>
+          <div class="md-preview note-md" id="md-preview" hidden></div>
+          <button type="button" class="btn ghost small" id="md-preview-toggle">👁 预览</button>
+        </div>
       </label>
 
       <label class="field">读者注

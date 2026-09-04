@@ -4,8 +4,10 @@
  * 本环境网络不可达（CDN 下载 marked 失败），故实现本模块替代，仍满足
  * 「本地化、无外链」红线。只支持项目笔记实际用到的受控语法子集：
  *
- *   · 标题（#~####）、粗体 **x**、斜体 *x*、删除线 ~~x~~
+ *   · 标题（#~####）、粗体 **x**、斜体 *x*、删除线 ~~x~~、高亮 ==x==
  *   · 行内代码 `x`、围栏代码块 ```lang ... ```
+ *   · 公式节点识别：行内 $x^2$ → span.math.math-inline；块级 $$…$$（同行/跨行）→ span.math.math-block
+ *     （内容逐字保留、先转义；实际排版由 mathjax-boot typesetInto 定点处理，未加载时原文可见）
  *   · 无序列表（- * +）、有序列表（1. 等）、引用 >
  *   · 链接 [t](url)、图片 ![alt](src)、简版表格（| 分隔行）+ 分隔行 ---
  *   · 段落、空行分段、（非 raw HTML——原文先转义，绝不执行未声明标签）
@@ -38,9 +40,26 @@ function escAttr(s) {
   return String(s).replace(/["'<>]/g, (c) => ESC[c]);
 }
 
-/** 行内解析（调用前文本已转义）：**b** *i* ~~s~~ `code` [t](u) ![a](s) */
+/** 行内解析（调用前文本已转义）：
+ * 顺序锁定：① 行内码先取出占位（防 $ / == 被误处理）→ ② $$…$$ / $…$ 公式节点
+ * → ③ ==高亮== → ④ 图片/链接 → ⑤ **b** *i* ~~s~~ → ⑥ 还原行内码。
+ */
 function inline(text) {
-  let out = text;
+  let out = String(text);
+  const codes = [];
+  out = out.replace(/`([^`]+)`/g, (m, c) => {
+    codes.push(`<code>${c}</code>`);
+    return `\u0000C${codes.length - 1}\u0000`;
+  });
+
+  // 块级公式（同行 $$…$$；独立行由 blocks() 处理）
+  out = out.replace(/\$\$([^$]+)\$\$/g, (m, body) => `<span class="math math-block">$$${body}$$</span>`);
+  // 行内公式 $…$（前导符不为 $、后置非 $，避免与 $$ 冲突）
+  out = out.replace(/(^|[^$])\$([^$\n]+)\$(?!\$)/g, (m, pre, body) => `${pre}<span class="math math-inline">$${body}$</span>`);
+
+  // 高亮 ==…==（内容不含 = 与换行）
+  out = out.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
+
   // 图片与链接（按顺序先图片）
   out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, alt, src) => {
     const u = safeUrl(src, true);
@@ -52,11 +71,12 @@ function inline(text) {
     if (!u) return `[${t}](${href})`;
     return `<a href="${escAttr(u)}" target="_blank" rel="noopener">${t}</a>`;
   });
-  out = out.replace(/`([^`]+)`/g, (m, code) => `<code>${code}</code>`);
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   out = out.replace(/__([^_]+)__/g, '<strong>$1</strong>');
   out = out.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
   out = out.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+
+  out = out.replace(/\u0000C(\d+)\u0000/g, (m, i) => codes[+i] || m);
   return out;
 }
 
@@ -76,6 +96,33 @@ function blocks(lines) {
       while (j < lines.length && !/^```\s*$/.test(lines[j].trim())) { buf.push(lines[j]); j++; }
       html.push(`<pre><code>${buf.join('\n')}</code></pre>`);
       i = j + 1;
+      continue;
+    }
+
+    // 块级公式：$$…$$（同行闭合或 $$ 起跨行到含 $$ 的行；内容已转义、逐字保留）
+    if (/^\$\$/.test(t)) {
+      if (/\$\$$/.test(t)) {
+        const inner = t.replace(/^\$\$/, '').replace(/\$\$$/, '');
+        html.push(`<p><span class="math math-block">$$${inner}$$</span></p>`);
+        i++;
+      } else {
+        const buf = [t.replace(/^\$\$/, '')];
+        let j = i + 1;
+        while (j < lines.length && !/\$\$$/.test(lines[j].trim())) {
+          buf.push(lines[j]);
+          j++;
+        }
+        if (j < lines.length) {
+          buf.push(lines[j].trim().replace(/\$\$$/, ''));
+          const inner = buf.join('\n').trim();
+          html.push(`<p><span class="math math-block">$$${inner}$$</span></p>`);
+          i = j + 1;
+        } else {
+          // 未闭合：退化为普通段落（公式原文可见）
+          html.push(`<p>${inline(t)}</p>`);
+          i++;
+        }
+      }
       continue;
     }
 

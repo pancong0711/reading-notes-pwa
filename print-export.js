@@ -121,11 +121,34 @@ const PRINT_CSS = `
   table { border-collapse: collapse; width: 100%; font-size: 10pt; }
   th, td { border: 1px solid #ddd; padding: 5px 8px; text-align: left; }
   img, table, blockquote, pre { page-break-inside: avoid; }
+  .math-block { display: block; text-align: center; margin: 12px 0; overflow-x: auto; }
+  .math-inline { display: inline-block; vertical-align: middle; }
+  mark { background: #fdf0d5; padding: 0 3px; }
+  .math-error { color: #b00020; }
   @media print {
     .print-note { border-bottom-color: #ccc; }
     a { color: inherit; text-decoration: none; }
   }
 `;
+
+/* 打印稿公式排版脚本（内嵌：加载本地 tex-svg.js 后对 .math 逐条 tex2svgPromise） */
+const PRINT_MATH_SCRIPT = `
+<script src="vendor/mathjax3/tex-svg.js"></script>
+<script>
+window.addEventListener('load', function () {
+  var els = document.querySelectorAll('.math');
+  if (!els.length || !window.MathJax) return;
+  var jobs = [];
+  [].forEach.call(els, function (el) {
+    var s = String(el.textContent || '').trim();
+    var d = el.classList.contains('math-block');
+    s = d ? s.replace(/^\\$\\$/, '').replace(/\\$\\$$/, '') : s.replace(/^\\$/, '').replace(/\\$$/, '');
+    jobs.push(MathJax.tex2svgPromise(s, { display: d }).then(function (n) {
+      el.innerHTML = ''; el.appendChild(n);
+    }).catch(function () { el.classList.add('math-error'); }));
+  });
+});
+</script>`;
 
 /**
  * 组装可打印 HTML：标题 + 统计行 + 分页样式 + 每篇 renderNoteDetail。
@@ -143,6 +166,7 @@ export function buildPrintHtml(notes, title, catalogById) {
 <meta charset="utf-8">
 <title>${htmlTitle}</title>
 <style>${PRINT_CSS}</style>
+${PRINT_MATH_SCRIPT}
 </head>
 <body>
 <h1 class="print-title">${htmlTitle}</h1>`;

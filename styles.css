@@ -852,6 +852,42 @@ main {
   margin-top: 6px;
 }
 
+/* ── 公式（mathjax-boot 产出）与高亮 ── */
+.note-md .math-block, .note-detail .math-block {
+  display: block;
+  text-align: center;
+  margin: 12px 0;
+  overflow-x: auto;
+}
+.note-md .math-inline, .note-detail .math-inline {
+  display: inline-block;
+  vertical-align: middle;
+}
+.mark, mark {
+  background: #f7e8c8;
+  padding: 0 3px;
+  border-radius: 3px;
+}
+.math-error { color: #b00020; }
+
+/* ── 富文本工具栏与预览（md-toolbar / md-editor）── */
+.md-editor { position: relative; }
+.md-toolbar {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-bottom: 6px; padding: 4px;
+  background: #f7f5ef; border: 1px solid var(--line); border-radius: 8px;
+}
+.md-toolbar button {
+  min-width: 26px; padding: 3px 8px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: #fff; color: #555; font-family: inherit; font-size: 12px; cursor: pointer;
+}
+.md-toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+.md-preview {
+  border: 1px dashed var(--line); border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 6px;
+}
+
 /* ── 按钮补充 ── */
 
 .btn.primary {
