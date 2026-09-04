@@ -453,9 +453,11 @@ async function saveRecord() {
     ...collectTypeFields(existing),    // book/pages/meta 按类型字段覆盖
   };
   await addNote(rec);
+  const savedId = editingId;
+  const fromDetail = editingFromDetail;
   closeEditor();
   await refresh();
-  toast(editingId ? '已更新' : '已保存');
+  toast(fromDetail ? '已保存，返回详情' : (savedId ? '已更新' : '已保存'));
 }
 
 /* ── AI 咨询（同 notes.js，OpenAI 兼容端点） ── */
@@ -994,18 +996,8 @@ els.list.addEventListener('click', async (event) => {
     return;
   }
 
-  // 点击卡片主体 → 展开/收起详情（共享渲染组件：markdown 正文 + 读者注/AI注 + 图片可达 + 公式排版）
-  const expanded = card.classList.toggle('expanded');
-  if (expanded && !card.querySelector('.note-detail')) {
-    const detail = document.createElement('div');
-    detail.className = 'note-detail';
-    const catalogById = {};
-    conceptCatalog.forEach((cc) => { catalogById[cc.id] = cc; });
-    card.appendChild(detail);
-    await renderNoteDetailInto(detail, note, catalogById);
-  } else if (!expanded) {
-    card.querySelector('.note-detail')?.remove();
-  }
+  // 点击卡片主体 → 跳转详情页（需求：PWA 笔记详情页；inline 展开已省略避免双轨）
+  location.href = `note.html?id=${encodeURIComponent(note.id)}`;
 });
 
 /* ── 启动 ── */
@@ -1017,4 +1009,14 @@ els.list.addEventListener('click', async (event) => {
   renderMdToolbar();
   refresh(); // applySearch() 负责空状态文案（含搜索无结果态）
   loadConceptCatalog();
+  // 编辑直入：note.html「✏️ 编辑」→ type.html?t=<类型>&edit=<id>（编辑器与创建一致，保存回跳详情页）
+  const editId = new URLSearchParams(location.search).get('edit');
+  if (editId) {
+    editingFromDetail = true;
+    setTimeout(async () => {
+      const rec = (await getAllNotes()).find((n) => n.id === editId);
+      if (rec) openEditor(rec);
+      else toast('没有找到该记录（可能尚未导入）', 4200);
+    }, 300);
+  }
 })();

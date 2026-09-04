@@ -498,6 +498,16 @@ export async function getAllNotes(type) {
   return filtered;
 }
 
+/** 按 id 直查单条记录（无则 null）——详情页 note.html 使用 */
+export async function getNoteById(id) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(STORE, 'readonly').objectStore(STORE).get(String(id));
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 /** 笔记总数 */
 export async function countNotes() {
   const db = await openDB();
@@ -1088,6 +1098,7 @@ window.exportConceptCatalogYaml = exportConceptCatalogYaml;
 window.getDomainNameMap = getDomainNameMap;
 window.ingestImageFiles = ingestImageFiles;
 window.collectImageFiles = collectImageFiles;
+window.getNoteById = getNoteById;
 window.saveLocalGraph = saveLocalGraph;
 window.getLocalGraph = getLocalGraph;
 window.clearLocalGraph = clearLocalGraph;

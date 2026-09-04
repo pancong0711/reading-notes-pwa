@@ -870,6 +870,49 @@ main {
 }
 .math-error { color: #b00020; }
 
+/* ── 笔记详情页（note.html：全屏阅读，阅读列居中）── */
+.note-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 14px 4px 40px;
+}
+.note-page-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.note-page-head { margin-bottom: 14px; }
+.note-page-head h1 {
+  font-size: 22px;
+  margin: 6px 0 6px;
+  color: #3a3226;
+  line-height: 1.4;
+}
+.note-page-meta { font-size: 13px; color: #8a7a5c; margin: 0; }
+.note-page-body {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 20px;
+  font-size: 14.5px;
+  line-height: 2;
+}
+.note-page-body .note-sec { margin-top: 18px; }
+.note-page-body .note-sec h4 { font-size: 13px; }
+.note-page-body img.note-detail-img { max-width: 100%; border-radius: 10px; }
+.graph-note-open {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 3px 12px;
+  border: 1px solid #c9a96e;
+  border-radius: 999px;
+  color: #8a6d3b;
+  text-decoration: none;
+  font-size: 12px;
+}
+.graph-note-open:hover { background: #f7f0e0; }
+
 /* ── 富文本工具栏与预览（md-toolbar / md-editor）── */
 .md-editor { position: relative; }
 .md-toolbar {

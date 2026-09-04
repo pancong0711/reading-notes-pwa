@@ -76,6 +76,14 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
     return renderNoteDetail(full, m);
   }
 
+  /** 详情页链接（fullNoteMap 命中才有真实 id 可跳） */
+  function fullNoteLink(n) {
+    var full = fullNoteMap[(n.book || '') + '\n' + (n.title || '')];
+    return (full && full.id)
+      ? '<a class="graph-note-open" href="note.html?id=' + encodeURIComponent(full.id) + '">📄 查看详情页</a>'
+      : '';
+  }
+
   function buildGraph() {
     domainById = {};
     colorOf = {};
@@ -496,7 +504,7 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
           }).join('') +
           '</div></div>'
         : '') +
-      '<div class="graph-panel-section"><h3>笔记全文</h3>' + fullNoteHtml(n) + '</div>';
+      '<div class="graph-panel-section"><h3>笔记全文</h3>' + fullNoteHtml(n) + fullNoteLink(n) + '</div>';
 
     openPanel(html);
     panelBody.querySelectorAll('.graph-concept-chip').forEach(function (btn) {

@@ -44,7 +44,7 @@ function conceptsHtml(concepts, catalogById) {
 function imageHtml(src) {
   if (!src) return '';
   const s = String(src);
-  return `<a href="${esc(s)}" target="_blank" rel="noopener"><img class="note-detail-img" src="${esc(s)}" alt="笔记图片" loading="lazy"></a>`;
+  return `<a href="${esc(s)}" target="_blank" rel="noopener"><img class="note-detail-img" src="${esc(s)}" data-path="${esc(s)}" alt="笔记图片" loading="lazy"></a>`;
 }
 
 function imagesHtml(note) {

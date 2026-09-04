@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>笔记详情 · 读书笔记</title>
+  <link rel="stylesheet" href="styles.css?v=20260828">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html">读书笔记</a>
+      <nav class="nav" id="main-nav"></nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="note-page">
+      <!-- 顶栏：返回 + 编辑 -->
+      <div class="note-page-top">
+        <button class="btn ghost small" id="back-btn" type="button">← 返回</button>
+        <button class="btn primary small" id="edit-btn" type="button">✏️ 编辑</button>
+      </div>
+
+      <!-- 题头：类型徽标 + 标题 + 元信息 -->
+      <div class="note-page-head">
+        <span class="graph-panel-kind" id="note-type-badge" hidden></span>
+        <h1 id="note-title">加载中…</h1>
+        <p class="note-page-meta" id="note-meta"></p>
+      </div>
+
+      <!-- 详情（note-detail 共享组件 + 公式排版） -->
+      <div class="note-page-body note-md" id="note-body"></div>
+
+      <p class="muted" id="note-missing" hidden></p>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">读书笔记 · 本地浏览</div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="file-warning.js"></script>
+  <script src="sw-register.js"></script>
+  <script src="types.js"></script>
+  <script type="module" src="note.js?v=20260828"></script>
+</body>
+</html>

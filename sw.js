@@ -9,7 +9,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v17';
+var CACHE_NAME = 'reading-notes-v18';
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [
@@ -27,6 +27,8 @@ var CORE_ASSETS = [
   './sw-register.js',
   './heatmap.js',
   './heatmap.css',
+  './note.html',   // v18：笔记详情页（全屏阅读+编辑入口）
+  './note.js',   // v18：详情页逻辑
   './notes.html',
   './notes.js',
   './diary.html',
