@@ -101,7 +101,7 @@ function blocks(lines) {
 
     // 块级公式：$$…$$（同行闭合或 $$ 起跨行到含 $$ 的行；内容已转义、逐字保留）
     if (/^\$\$/.test(t)) {
-      if (/\$\$$/.test(t)) {
+      if (t.length > 4 && /\$\$$/.test(t)) {
         const inner = t.replace(/^\$\$/, '').replace(/\$\$$/, '');
         html.push(`<p><span class="math math-block">$$${inner}$$</span></p>`);
         i++;

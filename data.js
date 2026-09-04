@@ -99,8 +99,8 @@ function openDB() {
   return _dbPromise;
 }
 
-/** 规整自由标签：去空白、去重、过滤图片路径/文件名噪音 */
-function normalizeTags(tags) {
+/** 规整自由标签：去空白、去重、过滤图片路径/文件名噪音（导出供差分测试） */
+export function normalizeTags(tags) {
   if (!Array.isArray(tags)) return [];
   const seen = new Set();
   const out = [];
@@ -599,9 +599,9 @@ function normalizeDomainDef(d) {
 }
 
 /**
- * 校验概念目录：id 唯一 + domain 存在 + 基本字段非空。抛 Error（中文），返回 true。
+ * 校验概念目录：id 唯一 + domain 存在 + 基本字段非空。抛 Error（中文），返回 true。（导出供差分测试）
  */
-function validateConceptCatalog(catalog) {
+export function validateConceptCatalog(catalog) {
   const domains = (catalog && catalog.domains) || [];
   const concepts = (catalog && catalog.concepts) || [];
   const ids = new Set();
