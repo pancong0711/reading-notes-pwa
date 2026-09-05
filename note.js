@@ -4,6 +4,7 @@
  *   ?id=<记录id> → getNoteById → note-detail 全量渲染（markdown/公式排版/图片自包含供图）
  *   「✏️ 编辑」→ type.html?t=<type>&edit=<id>（统一编辑器，保存后回跳本页）
  *   「← 返回」→ history.back()（无来源时回 type.html?t=<type>）
+ *   返回顶部 FAB（需求 20260905-②）：下滑超 400px 淡入，点击平滑回顶（reduced-motion 直跳）
  */
 import { getNoteById, getConceptCatalog } from './data.js';
 import { renderNoteDetailInto } from './note-detail.js';
@@ -102,5 +103,23 @@ $('back-btn').addEventListener('click', () => {
   if (history.length > 1) history.back();
   else location.href = 'type.html';
 });
+
+/* ── 返回顶部 FAB（需求 20260905-②：长文下拉后快速回顶） ──
+ * 下滑超 400px 淡入，回顶后消失；prefers-reduced-motion 时直跳不滚动。 */
+const backTopBtn = $('back-top-btn');
+const BACK_TOP_THRESHOLD = 400;
+
+function updateBackTop() {
+  backTopBtn.classList.toggle('show', (window.scrollY || 0) > BACK_TOP_THRESHOLD);
+}
+
+backTopBtn.addEventListener('click', () => {
+  const reduce = window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+});
+
+window.addEventListener('scroll', updateBackTop, { passive: true });
+updateBackTop();
 
 load();

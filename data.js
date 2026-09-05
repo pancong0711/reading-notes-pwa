@@ -99,14 +99,27 @@ function openDB() {
   return _dbPromise;
 }
 
-/** 规整自由标签：去空白、去重、过滤图片路径/文件名噪音（导出供差分测试） */
+/** 规整自由标签：兼容字符串/对象形态（手写 JSON 变体，需求 20260905-批次一 F1），去空白、去重、过滤图片路径/文件名噪音（导出供差分测试）
+ *  兼容形态：
+ *    · "物理,光学" / "物理；光学、材料" —— 按 ，,;；、 切分
+ *    · [{name:'物理'} / {id:'光学'} / {label:…} / {tag:…}] —— 对象取首个非空字段
+ */
 export function normalizeTags(tags) {
+  if (tags == null) return [];
+  if (typeof tags === 'string') tags = tags.split(/[，,;；、]/);
   if (!Array.isArray(tags)) return [];
   const seen = new Set();
   const out = [];
   for (const t of tags) {
-    if (typeof t !== 'string') continue;
-    const v = t.trim();
+    let v = '';
+    if (typeof t === 'string') {
+      v = t;
+    } else if (t && typeof t === 'object') {
+      v = String(t.name || t.id || t.label || t.tag || '');
+    } else {
+      continue;
+    }
+    v = v.trim();
     if (!v) continue;
     if (/(^|[\\/])assets[\\/]/i.test(v) || /\.(jpe?g|png|gif|webp|bmp|svg|avif)$/i.test(v) || /^img_\w+\.\w+$/i.test(v)) {
       continue;
@@ -432,6 +445,41 @@ export async function diffNotePackage(json) {
     if (!matched) diff.localOnly += 1;
   }
   return diff;
+}
+
+/**
+ * 汇总导入包的标签/概念规模（导入对话框统计行，需求 20260905-批次一 F1）。
+ * @returns {{total:number, tagRecords:number, tagKinds:number, conceptRecords:number, conceptKinds:number}}
+ *   tagRecords/conceptRecords = 携带标签/概念的记录数；tagKinds/conceptKinds = 去重后的标签/概念个数
+ * 纯函数（浏览器与 node 均可调用）；口径与 normalizeTags/normalizeConcepts 一致。
+ */
+export function summarizePackage(json) {
+  const list = Array.isArray(json)
+    ? json
+    : json && Array.isArray(json.notes) ? json.notes : [];
+  const tagRecs = new Set();
+  const tagVals = new Set();
+  const conRecs = new Set();
+  const conVals = new Set();
+  for (const n of list) {
+    if (!n || typeof n !== 'object') continue;
+    const key = n.id != null ? String(n.id) : (n.title || String(tagRecs.size + conRecs.size));
+    for (const t of normalizeTags(n.tags)) {
+      tagRecs.add(key);
+      tagVals.add(t);
+    }
+    for (const c of normalizeConcepts(n.concepts)) {
+      conRecs.add(key);
+      conVals.add(c.id);
+    }
+  }
+  return {
+    total: list.length,
+    tagRecords: tagRecs.size,
+    tagKinds: tagVals.size,
+    conceptRecords: conRecs.size,
+    conceptKinds: conVals.size,
+  };
 }
 
 /**

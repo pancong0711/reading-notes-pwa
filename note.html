@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>笔记详情 · 读书笔记</title>
-  <link rel="stylesheet" href="styles.css?v=20260828">
+  <link rel="stylesheet" href="styles.css?v=20260905">
 </head>
 <body>
   <header class="site-header">
@@ -40,11 +40,14 @@
     <div class="container">读书笔记 · 本地浏览</div>
   </footer>
 
+  <!-- 返回顶部 FAB（需求 20260905-②：长文下拉后快速回顶） -->
+  <button class="back-top-fab" id="back-top-btn" type="button" aria-label="返回顶部" title="返回顶部">↑</button>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="file-warning.js"></script>
   <script src="sw-register.js"></script>
   <script src="types.js"></script>
-  <script type="module" src="note.js?v=20260828"></script>
+  <script type="module" src="note.js?v=20260905"></script>
 </body>
 </html>

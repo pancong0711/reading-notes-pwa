@@ -17,6 +17,7 @@ import {
   exportNotePackage,
   diffNotePackage,
   mergeNotePackage,
+  summarizePackage,
   getAllTags,
   renameTag,
   deleteTag,
@@ -600,10 +601,12 @@ async function openImportDialog(pkg, source) {
   pendingImport = { pkg, diff };
   const list = Array.isArray(pkg.notes) ? pkg.notes : [];
   const at = pkg.exportedAt ? `（导出时间 ${String(pkg.exportedAt).slice(0, 16).replace('T', ' ')}）` : '';
+  const stats = summarizePackage(pkg);   // 标签/概念规模（需求 20260905-批次一 F1）
   els.importDiffText.textContent =
     `来源：${source}，包内 ${list.length} 条${at}\n` +
     `新增 ${fmtCount(diff.added.length)} ｜ 更新 ${fmtCount(diff.updated.length)} ｜ ` +
-    `本端更新 ${fmtCount(diff.localNewer.length)} ｜ 不变 ${fmtCount(diff.unchanged)} ｜ 本端独有 ${fmtCount(diff.localOnly)}`;
+    `本端更新 ${fmtCount(diff.localNewer.length)} ｜ 不变 ${fmtCount(diff.unchanged)} ｜ 本端独有 ${fmtCount(diff.localOnly)}\n` +
+    `标签：${stats.tagRecords} 条记录 · ${stats.tagKinds} 个 ｜ 概念：${stats.conceptRecords} 条记录 · ${stats.conceptKinds} 个`;
   els.importPanel.hidden = false;
 }
 

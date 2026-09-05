@@ -901,6 +901,45 @@ main {
 .note-page-body .note-sec { margin-top: 18px; }
 .note-page-body .note-sec h4 { font-size: 13px; }
 .note-page-body img.note-detail-img { max-width: 100%; border-radius: 10px; }
+
+/* ── 返回顶部 FAB（note.html；需求 20260905-②）──
+ * 右下角圆形悬浮：下滑超阈值（JS 控制 .show）淡入，点击平滑回顶。 */
+.back-top-fab {
+  position: fixed;
+  right: 18px;
+  bottom: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--accent-strong);
+  background: var(--accent);
+  color: #fff;
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(59, 54, 48, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s;
+  z-index: 60;   /* 低于 toast(99)，不挡提示 */
+}
+.back-top-fab.show {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+.back-top-fab:hover { background: var(--accent-strong); }
+.back-top-fab:active { transform: scale(0.94); }
+@media (max-width: 600px) {
+  .back-top-fab { width: 56px; height: 56px; right: 16px; bottom: 26px; font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .back-top-fab { transition: none; }
+}
 .graph-note-open {
   display: inline-block;
   margin-top: 10px;
