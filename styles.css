@@ -1015,6 +1015,10 @@ a.tag:hover {
   line-height: 1.9;
 }
 .note-page-body .note-md { font-size: 1em; }   /* 详情正文继承阅读字号（覆盖 .note-md 13px 紧凑档） */
+/* R12（关键修复）：R7 拆层后 #note-body 仍带 .note-md（13px）直接命中内层——
+ * 卡片的 var(--fs-reading) 被压回恒定 13px，正文档位永远无效。
+ * id 提权回 1em：继承 .note-page-body 的 var(--fs-reading)，Aa 四档方能作用于正文。 */
+#note-body { font-size: 1em; }
 .note-page-body .note-sec { margin-top: 18px; }
 /* R5：卡内排版全部 em 相对（正文=1em 基准）——Aa 四档下标题/段落/表格/代码整体等比、层级不倒挂 */
 .note-page-body .note-sec h4 { font-size: 0.8em; letter-spacing: 0.5px; }
