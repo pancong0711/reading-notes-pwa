@@ -350,6 +350,7 @@
 
 .graph-panel-body {
   padding: 18px 22px 28px;
+  font-size: calc(15px * var(--fs-mul, 1));   /* 面板正文随阅读档位（批次三） */
 }
 
 .graph-panel-head {

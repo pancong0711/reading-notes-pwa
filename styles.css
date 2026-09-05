@@ -21,7 +21,16 @@
   --shadow: 0 1px 3px rgba(59, 54, 48, 0.07);
   --shadow-hover: 0 3px 10px rgba(59, 54, 48, 0.10);
   --max-width: 760px;
+  /* 阅读字号双轨（需求 20260905-批次三）：
+   *  · 流式：--fs-reading 随视口缓增（375px 手机 ≈16px → ≥760px 桌面 ≈17.5px），零交互
+   *  · 档位：--fs-mul 用户档位乘数（reading-font.js 读 localStorage 写 <html data-fs>），
+   *    小 0.88 / 标准 1 / 大 1.13 / 特大 1.29；个人偏好优先于设备尺寸 */
+  --fs-reading: clamp(16px, 0.4vw + 14.5px, 17.5px);
+  --fs-mul: 1;
 }
+html[data-fs='small'] { --fs-mul: 0.88; }
+html[data-fs='large'] { --fs-mul: 1.13; }
+html[data-fs='xlarge'] { --fs-mul: 1.29; }
 
 * {
   box-sizing: border-box;
@@ -905,9 +914,10 @@ a.tag:hover {
 }
 .math-error { color: #b00020; }
 
-/* ── 笔记详情页（note.html：全屏阅读，阅读列居中）── */
+/* ── 笔记详情页（note.html：全屏阅读，阅读列居中）──
+ * 阅读列 640px：标准档正文 ≈17.5px 下行长 ≈34 字（中文长文舒适区 32-36 字） */
 .note-page {
-  max-width: 760px;
+  max-width: 640px;
   margin: 0 auto;
   padding: 14px 4px 40px;
 }
@@ -919,20 +929,59 @@ a.tag:hover {
 }
 .note-page-head { margin-bottom: 14px; }
 .note-page-head h1 {
-  font-size: 22px;
+  font-size: calc(22px * var(--fs-mul, 1));
   margin: 6px 0 6px;
   color: #3a3226;
   line-height: 1.4;
 }
 .note-page-meta { font-size: 13px; color: #8a7a5c; margin: 0; }
+
+/* ── 阅读字号档位（Aa popover；需求 20260905-批次三）── */
+.fs-switch {
+  position: relative;
+  margin-top: 6px;
+  display: inline-block;
+}
+.fs-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 70;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-hover);
+  padding: 6px;
+  min-width: 172px;
+  display: flex;
+  flex-direction: column;
+}
+.fs-pop [data-fs-pick] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fs-pop [data-fs-pick]:hover { background: var(--accent-soft); }
+.fs-pop .fs-demo { color: var(--muted); }
+.fs-pop .fs-hint { margin: 4px 6px 2px; font-size: 11px; }
 .note-page-body {
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 18px 20px;
-  font-size: 14.5px;
-  line-height: 2;
+  font-size: calc(var(--fs-reading) * var(--fs-mul, 1));   /* 流式 × 档位（批次三） */
+  line-height: 1.9;
 }
+.note-page-body .note-md { font-size: inherit; }   /* 详情正文继承阅读字号（覆盖 .note-md 13px 紧凑档） */
 .note-page-body .note-sec { margin-top: 18px; }
 .note-page-body .note-sec h4 { font-size: 13px; }
 .note-page-body img.note-detail-img { max-width: 100%; border-radius: 10px; }
@@ -1028,6 +1077,7 @@ a.tag:hover {
 .md-preview {
   border: 1px dashed var(--line); border-radius: 8px;
   padding: 10px 14px; margin-bottom: 6px;
+  font-size: calc(15px * var(--fs-mul, 1));   /* 预览随阅读档位（批次三） */
 }
 
 /* ── 按钮补充 ── */

@@ -104,6 +104,55 @@ $('back-btn').addEventListener('click', () => {
   else location.href = 'type.html';
 });
 
+/* ── 阅读字号档位（需求 20260905-批次三：四档 popover）──
+ * 选中即写 localStorage（reading-font.js 三页共用键 reading-font-size）并立即改 <html data-fs>。 */
+const FS_KEY = 'reading-font-size';
+const FS_LABEL = { small: '小', '': '标准', large: '大', xlarge: '特大' };
+
+const fsBtn = $('fs-btn');
+const fsPop = $('fs-pop');
+
+function markFsSelection() {
+  const current = document.documentElement.getAttribute('data-fs') || '';
+  fsPop.querySelectorAll('[data-fs-pick]').forEach((b) => {
+    const v = b.getAttribute('data-fs-pick');
+    const mark = v === current ? '⭕' : '○';
+    b.firstChild.textContent = `${mark} ${FS_LABEL[v]} `;
+  });
+  fsBtn.setAttribute('aria-expanded', String(!fsPop.hidden));
+}
+
+function toggleFsPop(force) {
+  fsPop.hidden = typeof force === 'boolean' ? !force : !fsPop.hidden;
+  markFsSelection();
+}
+
+function initFontSwitch() {
+  fsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleFsPop();
+  });
+  fsPop.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-fs-pick]');
+    if (!btn) return;
+    const v = btn.getAttribute('data-fs-pick');
+    try {
+      if (v) localStorage.setItem(FS_KEY, v);
+      else localStorage.removeItem(FS_KEY);
+    } catch (err) { /* 存储不可用时仅本页生效 */ }
+    if (v) document.documentElement.setAttribute('data-fs', v);
+    else document.documentElement.removeAttribute('data-fs');
+    markFsSelection();
+    fsPop.hidden = true;
+    toast(`阅读字号：${FS_LABEL[v] || '标准'}`);
+  });
+  // 点击外部关闭
+  document.addEventListener('click', (e) => {
+    if (!fsPop.hidden && !e.target.closest('.fs-switch')) toggleFsPop(false);
+  });
+  markFsSelection();
+}
+
 /* ── 返回顶部 FAB（需求 20260905-②：长文下拉后快速回顶） ──
  * 下滑超 400px 淡入，回顶后消失；prefers-reduced-motion 时直跳不滚动。 */
 const backTopBtn = $('back-top-btn');
@@ -121,5 +170,7 @@ backTopBtn.addEventListener('click', () => {
 
 window.addEventListener('scroll', updateBackTop, { passive: true });
 updateBackTop();
+
+initFontSwitch();
 
 load();

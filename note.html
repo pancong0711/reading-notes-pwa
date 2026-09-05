@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>笔记详情 · 读书笔记</title>
-  <link rel="stylesheet" href="styles.css?v=20260905">
+  <link rel="stylesheet" href="styles.css?v=20260905b">
+  <script src="reading-font.js"></script>
 </head>
 <body>
   <header class="site-header">
@@ -22,11 +23,21 @@
         <button class="btn primary small" id="edit-btn" type="button">✏️ 编辑</button>
       </div>
 
-      <!-- 题头：类型徽标 + 标题 + 元信息 -->
+      <!-- 题头：类型徽标 + 标题 + 元信息 + 字号档位 -->
       <div class="note-page-head">
         <span class="graph-panel-kind" id="note-type-badge" hidden></span>
         <h1 id="note-title">加载中…</h1>
         <p class="note-page-meta" id="note-meta"></p>
+        <div class="fs-switch">
+          <button class="btn ghost small" id="fs-btn" type="button" aria-haspopup="true" aria-expanded="false" title="阅读字号">Aa</button>
+          <div class="fs-pop" id="fs-pop" role="menu" hidden>
+            <button type="button" role="menuitem" data-fs-pick="small">小 <span class="fs-demo" style="font-size:13px">字</span></button>
+            <button type="button" role="menuitem" data-fs-pick="">⭕ 标准 <span class="fs-demo" style="font-size:15px">字</span></button>
+            <button type="button" role="menuitem" data-fs-pick="large">大 <span class="fs-demo" style="font-size:17px">字</span></button>
+            <button type="button" role="menuitem" data-fs-pick="xlarge">特大 <span class="fs-demo" style="font-size:19px">字</span></button>
+            <p class="muted fs-hint">仅本机生效（存本地），详情/图谱面板同源</p>
+          </div>
+        </div>
       </div>
 
       <!-- 详情（note-detail 共享组件 + 公式排版） -->
@@ -48,6 +59,6 @@
   <script src="file-warning.js"></script>
   <script src="sw-register.js"></script>
   <script src="types.js"></script>
-  <script type="module" src="note.js?v=20260905"></script>
+  <script type="module" src="note.js?v=20260905b"></script>
 </body>
 </html>
