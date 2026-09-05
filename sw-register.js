@@ -12,4 +12,24 @@
       console.warn('Service Worker 注册失败：', err);
     });
   }
+
+  /* 修复轮 R9c：页脚 SW 版本角标——缓存键形如 reading-notes-v27；
+   * 取已缓存的最大版本号（更新过渡期可能新旧并存），用户可一眼确认"改了没生效"。
+   * 放在 ready 之后（首访无 SW 时 caches 可能为空，静默跳过）。 */
+  if ('serviceWorker' in navigator && 'caches' in window) {
+    navigator.serviceWorker.ready
+      .then(function () { return caches.keys(); })
+      .then(function (keys) {
+        var versions = (keys || [])
+          .map(function (k) { var m = /reading-notes-v(\d+)/.exec(k); return m ? parseInt(m[1], 10) : 0; })
+          .filter(function (n) { return n > 0; });
+        if (!versions.length) return;
+        var footers = document.querySelectorAll('.site-footer .container');
+        if (!footers.length) return;
+        footers.forEach(function (el) {
+          el.innerHTML = el.innerHTML + ' · <span class="sw-version">SW v' + Math.max.apply(null, versions) + '</span>';
+        });
+      })
+      .catch(function () { /* Cache Storage 不可用（隐私模式等）：无角标 */ });
+  }
 })();

@@ -851,6 +851,42 @@ export async function addConcept({ id, name, domain, aliases = '', keywords = ''
   return concept;
 }
 
+/**
+ * 删除域（修复轮 R10a，用户拍板）：级联删除域内全部概念，并清除本地记录的引用标注。
+ * 空域直接删；UI 负责先确认并自动备份（破坏性操作）。
+ * @returns {Promise<{removedConcepts:number, clearedRefs:number}>}
+ */
+export async function deleteDomain(domainId) {
+  const catalog = (await getConceptCatalog()) || { domains: [], concepts: [] };
+  const did = String(domainId || '').trim();
+  const domain = (catalog.domains || []).find((d) => d.id === did);
+  if (!domain) throw new Error(`域「${did}」不存在`);
+  const victimIds = new Set((catalog.concepts || [])
+    .filter((c) => (c.domain || '') === did).map((c) => c.id));
+
+  let clearedRefs = 0;
+  if (victimIds.size) {
+    const all = await getAllNotes();
+    for (const n of all) {
+      if (!Array.isArray(n.concepts) || !n.concepts.length) continue;
+      const rest = n.concepts.filter((c) => {
+        const cid = typeof c === 'string' ? c : (c && c.id) || '';
+        return !victimIds.has(cid);
+      });
+      if (rest.length !== n.concepts.length) {
+        clearedRefs += n.concepts.length - rest.length;
+        await addNote({ ...n, concepts: rest, updatedAt: Date.now() });
+      }
+    }
+  }
+
+  await saveConceptCatalog({
+    domains: (catalog.domains || []).filter((d) => d.id !== did),
+    concepts: (catalog.concepts || []).filter((c) => c.domain !== did),
+  });
+  return { removedConcepts: victimIds.size, clearedRefs };
+}
+
 /** 可编辑字段（与 CLI 一致） */
 export const CONCEPT_EDITABLE_FIELDS = ['id', 'name', 'domain', 'aliases', 'keywords', 'related', 'description'];
 

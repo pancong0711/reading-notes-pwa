@@ -341,7 +341,10 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
   /* ══ 图例（域 = 标签/着色，可点击显隐）══ */
 
   function renderLegend() {
-    var doms = rawData.domains || [];
+    // 修复轮 R10b：图例只渲染**有节点**的域——0 概念的空域（删除概念后遗留/示例残留）不再出现
+    var withNodes = {};
+    allNodes.forEach(function (nd) { if (nd.domain) withNodes[nd.domain] = true; });
+    var doms = (rawData.domains || []).filter(function (d) { return withNodes[d.id]; });
     if (!doms.length) { legendEl.hidden = true; return; }
     legendEl.hidden = false;
     legendEl.innerHTML = '<div class="graph-legend-title">域（点击显隐）</div>' +

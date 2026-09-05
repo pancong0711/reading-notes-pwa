@@ -11,7 +11,10 @@
  * 校验规则与 CLI concept_catalog.py 一致（data.js 数据层实现）。
  */
 import {
+  deleteDomain,
   domainColorFor,
+  exportNotePackage,
+  getConceptById,
   getConceptCatalog,
   saveConceptCatalog,
   getAllConcepts,
@@ -132,7 +135,7 @@ function renderList() {
     const dname = (domain && domain.name) || domainId || '未归域';
     const group = document.createElement('div');
     group.className = 'note-group concept-group';
-    group.innerHTML = `<div class="note-group-head"><h2>${esc(dname)}</h2><span class="book-count">${esc(domain && domain.color || '')}</span></div>`;
+    group.innerHTML = `<div class="note-group-head"><h2>${esc(dname)}<button class="btn ghost small" data-del-domain="${esc(domainId)}" type="button" title="删除域（级联删其中概念并清除引用）">🗑 删域</button></h2><span class="book-count">${esc(domain && domain.color || '')}</span></div>`;
     const listEl = document.createElement('div');
     listEl.className = 'note-list';
 
@@ -255,11 +258,19 @@ async function openDeletePanel(c) {
 
 async function confirmDelete() {
   if (!pendingDelete) return;
+  const targetId = pendingDelete.id;
+  let domId = '';
+  try { const cc = await getConceptById(targetId); domId = cc ? (cc.domain || '') : ''; } catch (e) { /* 忽略 */ }
   try {
-    const { clearedReferences } = await deleteConcept(pendingDelete.id, { force: pendingDelete.refs.length > 0 });
+    const { clearedReferences } = await deleteConcept(targetId, { force: pendingDelete.refs.length > 0 });
     toast(clearedReferences ? `已删除，并清除 ${clearedReferences} 处引用标注` : '已删除概念');
     closeDeletePanel();
     await loadCatalog();
+    // R10c：删概念后其域变空 → 提示可删域
+    if (domId) {
+      const rest = (await getAllConcepts()).filter((c) => c.domain === domId).length;
+      if (!rest) toast(`域「${domId}」已空——可在域标题处「🗑 删域」`, 4200);
+    }
   } catch (err) {
     toast(`删除失败：${err.message}`, 4200);
   }
@@ -268,6 +279,47 @@ async function confirmDelete() {
 function closeDeletePanel() {
   els.deletePanel.hidden = true;
   pendingDelete = null;
+}
+
+/* ── 删除域（修复轮 R10a：新建域即可删域；级联删概念+清引用；破坏性操作前自动备份）── */
+
+/** 自动下载迁移包备份（与导入前备份同机制；记录自带 tags/concepts 引用） */
+async function autoBackupBeforeDanger() {
+  const pkg = await exportNotePackage({ includeImages: false });
+  const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `读书笔记-删域前备份-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function openDeleteDomain(domainId) {
+  try {
+    const catalog = (await getConceptCatalog()) || { domains: [], concepts: [] };
+    const d = (catalog.domains || []).find((x) => x.id === domainId);
+    if (!d) { toast('域不存在'); return; }
+    const victims = (catalog.concepts || []).filter((c) => c.domain === domainId);
+    let refs = 0;
+    for (const c of victims) {
+      try { refs += (await scanConceptReferences(c.id)).length; } catch (e) { /* 引用扫描失败不阻断 */ }
+    }
+    if (victims.length) {
+      try {
+        await autoBackupBeforeDanger();
+      } catch (err) {
+        toast(`⚠️ 自动备份失败：${err.message}（可先手动「导出 concepts.yaml」再删）`, 5200);
+      }
+      if (!confirm(`删除域「${d.name || d.id}」及其中 ${victims.length} 个概念（清除 ${refs} 处记录引用）？\n已自动下载备份。删除后点「⚙️ 重新计算图谱」生效到图谱。`)) return;
+    } else if (!confirm(`删除空域「${d.name || d.id}」？`)) {
+      return;
+    }
+    const r = await deleteDomain(domainId);
+    await loadCatalog();
+    toast(`已删除域「${d.name || d.id}」（概念 ${r.removedConcepts} 个、引用 ${r.clearedRefs} 处）——重算图谱后生效`, 4600);
+  } catch (err) {
+    toast(`删除域失败：${err.message}`, 4200);
+  }
 }
 
 /* ── 载入 ── */
@@ -608,6 +660,8 @@ els.deleteCancel.addEventListener('click', closeDeletePanel);
 els.deleteConfirm.addEventListener('click', confirmDelete);
 
 els.list.addEventListener('click', (event) => {
+  const delDom = event.target.closest('[data-del-domain]');
+  if (delDom) { event.stopPropagation(); openDeleteDomain(delDom.getAttribute('data-del-domain')); return; }
   const card = event.target.closest('.concept-row');
   if (!card) return;
   const btn = event.target.closest('[data-act]');

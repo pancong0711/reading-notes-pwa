@@ -144,13 +144,159 @@ function initFontSwitch() {
     else document.documentElement.removeAttribute('data-fs');
     markFsSelection();
     fsPop.hidden = true;
-    toast(`阅读字号：${FS_LABEL[v] || '标准'}`);
+    // R9b：显示正文实际计算字号（设备兼容性自证——嵌套数学不支持的老内核会恒显 16px）
+    let px = '';
+    try { px = `（正文 ${getComputedStyle($('note-body')).fontSize}）`; } catch (e) { /* 忽略 */ }
+    toast(`阅读字号：${FS_LABEL[v] || '标准'}${px}`);
+    if (layout === 'spread') { spreadPage = 0; layoutSpread(); }   // 字号变了重排书页
   });
   // 点击外部关闭
   document.addEventListener('click', (e) => {
     if (!fsPop.hidden && !e.target.closest('.fs-switch')) toggleFsPop(false);
   });
   markFsSelection();
+}
+
+/* ── R7 书页模式（双页并排 + 翻页；CSS 多列分页，不拆 DOM）──
+ * reading-layout ∈ 'scroll'（默认连续）| 'spread'（书页）；宽屏 2 列 / 窄屏 1 列；
+ * 页宽固定，容器宽度按内容指数扩张+二分收紧求最小可容宽 → 总列数 → translateX 翻页。 */
+const LS_LAYOUT = 'reading-layout';
+let layout = 'scroll';
+let spreadPage = 0;
+let spreadPages = 1;
+const viewBtn = $('view-btn');
+const viewPop = $('view-pop');
+
+function markViewSelection() {
+  const current = layout;
+  viewPop.querySelectorAll('[data-layout-pick]').forEach((b) => {
+    const v = b.getAttribute('data-layout-pick');
+    const mark = v === current ? '⭕' : '○';
+    b.firstChild.textContent = mark === '⭕'
+      ? (v === 'spread' ? '⭕ 📖 书页 ' : '⭕ ↕ 连续 ')
+      : (v === 'spread' ? '○ 📖 书页 ' : '○ ↕ 连续 ');
+  });
+  viewBtn.setAttribute('aria-expanded', String(!viewPop.hidden));
+}
+
+function toggleViewPop(force) {
+  viewPop.hidden = typeof force === 'boolean' ? !force : !viewPop.hidden;
+  markViewSelection();
+}
+
+function visibleCols() { return window.innerWidth >= 1024 ? 2 : 1; }
+
+/** 书页排版：定列宽/页高 → 求内容最小可容宽（指数+二分） → 总列数/页数 → 翻页位置 */
+function layoutSpread() {
+  const viewport = $('spread-viewport');
+  const body = $('note-body');
+  const gap = 48;
+  const visible = visibleCols();
+  const colW = Math.max(300, Math.floor((viewport.clientWidth - gap * (visible - 1)) / visible));
+  const pageH = Math.max(420, window.innerHeight - 250);
+  viewport.style.height = pageH + 'px';
+  body.style.height = '100%';
+  body.style.columnWidth = colW + 'px';
+  body.style.columnGap = gap + 'px';
+  body.style.columnFill = 'auto';
+
+  let w = colW;
+  body.style.width = w + 'px';
+  let guard = 0;
+  while (body.scrollWidth > w + 2 && guard < 40) {   // 指数扩张（log 步）
+    w *= 2;
+    body.style.width = w + 'px';
+    guard++;
+  }
+  let lo = Math.max(colW, Math.floor(w / 2));
+  let hi = w;
+  while (hi - lo > colW && guard < 80) {             // 二分收紧到单列精度
+    const mid = Math.floor((lo + hi) / 2);
+    body.style.width = mid + 'px';
+    if (body.scrollWidth > mid + 2) lo = mid; else hi = mid;
+    guard++;
+  }
+  body.style.width = hi + 'px';
+  const cols = Math.max(1, Math.round((hi + gap) / (colW + gap)));
+  spreadPages = Math.max(1, Math.ceil(cols / visible));
+  updateSpread();
+}
+
+function updateSpread() {
+  const body = $('note-body');
+  const viewport = $('spread-viewport');
+  const gap = 48;
+  const visible = visibleCols();
+  const colW = Math.max(300, Math.floor((viewport.clientWidth - gap * (visible - 1)) / visible));
+  const page = Math.min(spreadPage, spreadPages - 1);
+  body.style.transform = `translateX(${-page * visible * (colW + gap)}px)`;
+  $('spread-indicator').textContent = `第 ${page + 1}/${spreadPages} 屏`;
+  $('spread-prev').disabled = page === 0;
+  $('spread-next').disabled = page >= spreadPages - 1;
+}
+
+function resetSpreadStart() { spreadPage = 0; }
+
+function applyLayout() {
+  const page = document.querySelector('.note-page');
+  const body = $('note-body');
+  if (layout === 'spread') {
+    page.classList.add('reading-spread');
+    $('spread-nav').hidden = false;
+    layoutSpread();
+  } else {
+    page.classList.remove('reading-spread');
+    $('spread-nav').hidden = true;
+    body.style.width = '';
+    body.style.height = '';
+    body.style.transform = '';
+    body.style.columnWidth = '';
+    body.style.columnGap = '';
+    body.style.columnFill = '';
+    spreadPage = 0;
+  }
+  markViewSelection();
+}
+
+function initViewSwitch() {
+  try { layout = localStorage.getItem(LS_LAYOUT) === 'spread' ? 'spread' : 'scroll'; } catch (e) { /* 忽略 */ }
+  viewBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleViewPop(); });
+  viewPop.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-layout-pick]');
+    if (!btn) return;
+    const v = btn.getAttribute('data-layout-pick');
+    layout = v === 'spread' ? 'spread' : 'scroll';
+    try {
+      if (layout === 'spread') localStorage.setItem(LS_LAYOUT, 'spread');
+      else localStorage.removeItem(LS_LAYOUT);
+    } catch (err) { /* 存储不可用仅本页生效 */ }
+    viewPop.hidden = true;
+    applyLayout();
+    toast(layout === 'spread' ? '视图：📖 书页（双页翻页）' : '视图：↕ 连续');
+  });
+  document.addEventListener('click', (e) => {
+    if (!viewPop.hidden && !e.target.closest('.fs-switch')) toggleViewPop(false);
+  });
+  $('spread-prev').addEventListener('click', () => { spreadPage = Math.max(0, spreadPage - 1); updateSpread(); });
+  $('spread-next').addEventListener('click', () => { spreadPage = Math.min(spreadPages - 1, spreadPage + 1); updateSpread(); });
+  document.addEventListener('keydown', (e) => {
+    if (layout !== 'spread') return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (e.key === 'ArrowLeft') { spreadPage = Math.max(0, spreadPage - 1); updateSpread(); }
+    else if (e.key === 'ArrowRight') { spreadPage = Math.min(spreadPages - 1, spreadPage + 1); updateSpread(); }
+  });
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    if (layout !== 'spread') return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { resetSpreadStart(); layoutSpread(); }, 200);
+  });
+  // 图片异步加载会改变内容高度 → 重排
+  $('note-body').addEventListener('load', () => {
+    if (layout === 'spread') layoutSpread();
+  }, true);   // 捕获阶段监听 img load（不冒泡）
+  markViewSelection();
 }
 
 /* ── 返回顶部 FAB（需求 20260905-②：长文下拉后快速回顶） ──
@@ -172,5 +318,9 @@ window.addEventListener('scroll', updateBackTop, { passive: true });
 updateBackTop();
 
 initFontSwitch();
+initViewSwitch();
 
-load();
+load().then(() => {
+  // 内容渲染/公式排版完成后，书页模式才可准确测量分页
+  if (layout === 'spread') layoutSpread();
+});

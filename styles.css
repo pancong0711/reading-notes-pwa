@@ -25,16 +25,19 @@
    * @50cm 视距 → 水平全角≈36.8°（±18.4°，落在 ISO 9241-5/HFES 主视区±15°与舒适区±30°之间）
    * → 25寸1080p（像素间距0.288mm）33.2cm ≈ 1152 CSS px（W3C 参考像素 96dpi@71cm）→ 取 1150px */
   --max-wide: 1150px;
-  /* 阅读字号双轨（需求 20260905-批次三）：
-   *  · 流式：--fs-reading 随视口缓增（375px 手机 ≈16px → ≥760px 桌面 ≈17.5px），零交互
-   *  · 档位：--fs-mul 用户档位乘数（reading-font.js 读 localStorage 写 <html data-fs>），
-   *    小 0.88 / 标准 1 / 大 1.13 / 特大 1.29；个人偏好优先于设备尺寸 */
+  /* 阅读字号双轨（需求 20260905-批次三；修复轮 R9a 改版）：
+   *  · 每档独立 clamp（标准档曲线 ×0.88/1.13/1.29 换算）——正文 font-size 直接
+   *    var(--fs-reading)，**不做 calc(clamp×var) 嵌套乘法**：旧内核（华为/夸克等
+   *    WebView Chrome 72-77）不支持嵌套 math → 声明无效退化为继承 16px 恒定
+   *    （即"只有标题变、正文不变"的根因，2026-09-05 定位）
+   *  · 流式：375px 手机 → ≥760px 桌面（标准档 16→17.5px），随视口连续缓增
+   *  · 档位：--fs-mul 仍供标题/图谱面板/预览的简单 calc 使用 */
   --fs-reading: clamp(16px, 0.4vw + 14.5px, 17.5px);
   --fs-mul: 1;
 }
-html[data-fs='small'] { --fs-mul: 0.88; }
-html[data-fs='large'] { --fs-mul: 1.13; }
-html[data-fs='xlarge'] { --fs-mul: 1.29; }
+html[data-fs='small'] { --fs-reading: clamp(14.1px, 0.35vw + 12.8px, 15.4px); --fs-mul: 0.88; }
+html[data-fs='large'] { --fs-reading: clamp(18.1px, 0.44vw + 16.3px, 19.8px); --fs-mul: 1.13; }
+html[data-fs='xlarge'] { --fs-reading: clamp(20.6px, 0.5vw + 18.7px, 22.6px); --fs-mul: 1.29; }
 
 * {
   box-sizing: border-box;
@@ -72,6 +75,10 @@ body {
 @media (min-width: 1024px) {
   .container {
     max-width: var(--max-wide);
+  }
+  /* R11（拍板 720）：宽屏正文栏 640→720——标准档 ≈41 字/大档 ≈36 字（小档 46.7 微超 45 上限，可接受） */
+  #note-body > * {
+    max-width: 720px;
   }
 }
 
@@ -164,6 +171,8 @@ main {
 }
 
 /* ---------- 页脚 ---------- */
+
+.sw-version { color: var(--muted); font-size: 12px; }   /* R9c 页脚版本角标 */
 
 .site-footer {
   border-top: 1px solid var(--line);
@@ -940,7 +949,7 @@ a.tag:hover {
   margin: 0;
   padding: 14px 4px 40px;
 }
-.note-page-body > * {
+#note-body > * {
   max-width: 640px;
   margin-left: auto;
   margin-right: auto;
@@ -1002,7 +1011,7 @@ a.tag:hover {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 18px 20px;
-  font-size: calc(var(--fs-reading) * var(--fs-mul, 1));   /* 流式 × 档位（批次三） */
+  font-size: var(--fs-reading);   /* 每档独立 clamp（R9a：旧内核无嵌套数学兼容问题） */
   line-height: 1.9;
 }
 .note-page-body .note-md { font-size: 1em; }   /* 详情正文继承阅读字号（覆盖 .note-md 13px 紧凑档） */
@@ -1065,6 +1074,48 @@ a.tag:hover {
 }
 @media (prefers-reduced-motion: reduce) {
   .back-top-fab { transition: none; }
+}
+
+/* ── R7 书页模式（双页并排 + 翻页；CSS 多列分页，内容不拆 DOM）── */
+.spread-viewport { min-height: 0; }   /* 滚动模式：透明层；书页模式由 .reading-spread 接管高度/裁切 */
+/* 视图切换按钮与选项浮层复用 .fs-switch/.fs-pop 结构 */
+.note-page.reading-spread .spread-viewport {
+  height: max(420px, calc(100vh - 250px));   /* 页高：视口高减题头/页脚 */
+  overflow: hidden;
+  position: relative;
+}
+.note-page.reading-spread #note-body {
+  height: 100%;
+  column-fill: auto;                 /* 固定页高，内容向右溢出成列 */
+  /* column-width / width / transform 由 note.js 按可见页数（宽屏2列/窄屏1列）设定 */
+  transition: transform 0.25s ease;
+  will-change: transform;
+}
+.note-page.reading-spread #note-body > * {
+  max-width: none;                   /* 列内不窄化（栏宽即正文栏） */
+  break-inside: avoid-column;
+}
+.note-page.reading-spread .note-page-body .note-md table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.spread-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+.spread-nav .spread-indicator {
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 72px;
+  text-align: center;
+}
+.spread-nav .btn:disabled { opacity: 0.35; cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .note-page.reading-spread #note-body { transition: none; }
 }
 .graph-note-open {
   display: inline-block;
