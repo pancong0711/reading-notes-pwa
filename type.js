@@ -96,6 +96,7 @@ const els = {
   fContent: $('f-content'),
   fProject: $('f-project'),
   projectList: $('project-list'),
+  tagHistory: $('tag-history'),
   filterBar: $('filter-bar'),
   filterProject: $('filter-project'),
   filterBook: $('filter-book'),
@@ -120,7 +121,7 @@ let editingId = null;        // 正在编辑的记录 id（null = 新建）
 let photoData = '';          // 压缩 base64
 let notesCache = [];         // 当前类型列表缓存
 let searchQuery = '';        // 搜索框当前关键词（空 = 显示全量）
-let listFilters = { project: '', book: '', dateFrom: '', dateTo: '' };  // 筛选栏状态（与搜索 AND 叠加）
+let listFilters = { project: '', book: '', dateFrom: '', dateTo: '', tag: '', concept: '' };  // 筛选栏状态（与搜索 AND 叠加；tag/concept 来自详情页 chips 入口）
 let toastTimer = null;
 let conceptCatalog = [];     // graph.json 概念目录 [{id,name,domain}]
 let conceptDomainNames = {}; // domain_id -> domain_name
@@ -353,6 +354,11 @@ function applySearch() {
   if (f.book) list = list.filter((n) => String(n.book || '') === f.book);
   if (f.dateFrom) list = list.filter((n) => String(n.date || '') >= f.dateFrom);
   if (f.dateTo) list = list.filter((n) => String(n.date || '') <= f.dateTo);
+  if (f.tag) list = list.filter((n) => Array.isArray(n.tags) && n.tags.includes(f.tag));
+  if (f.concept) {
+    list = list.filter((n) => Array.isArray(n.concepts)
+      && n.concepts.some((c) => (typeof c === 'string' ? c : (c && c.id) || '') === f.concept));
+  }
   els.count.textContent = q
     ? `匹配 ${list.length} / 共 ${notesCache.length} 条`
     : `${notesCache.length} 条`;
@@ -415,7 +421,15 @@ function collectTypeFields(rec, typeDef = currentType) {
   return out;
 }
 
+async function fillTagHistory() {
+  try {
+    const tags = await getAllTags();
+    els.tagHistory.innerHTML = tags.slice(0, 50).map((t) => `<option value="${esc(t.tag)}"></option>`).join('');
+  } catch (e) { /* 历史提示失败不影响编辑 */ }
+}
+
 function openEditor(rec) {
+  fillTagHistory();   // 既有标签历史提示（需求 20260905-批次二 F3）
   editingId = rec ? rec.id : null;
   const effType = (currentType.key === 'all' && rec) ? NoteTypes.getType(rec.type || 'note') : currentType;
   const eff = effType || currentType;
@@ -602,11 +616,15 @@ async function openImportDialog(pkg, source) {
   const list = Array.isArray(pkg.notes) ? pkg.notes : [];
   const at = pkg.exportedAt ? `（导出时间 ${String(pkg.exportedAt).slice(0, 16).replace('T', ' ')}）` : '';
   const stats = summarizePackage(pkg);   // 标签/概念规模（需求 20260905-批次一 F1）
+  const catLine = (pkg && pkg.conceptCatalog && Array.isArray(pkg.conceptCatalog.concepts))
+    ? `包内概念目录：${(pkg.conceptCatalog.domains || []).length} 域 · ${pkg.conceptCatalog.concepts.length} 概念（导入将增量并入本机，不动服务器）`
+    : '';
   els.importDiffText.textContent =
     `来源：${source}，包内 ${list.length} 条${at}\n` +
     `新增 ${fmtCount(diff.added.length)} ｜ 更新 ${fmtCount(diff.updated.length)} ｜ ` +
     `本端更新 ${fmtCount(diff.localNewer.length)} ｜ 不变 ${fmtCount(diff.unchanged)} ｜ 本端独有 ${fmtCount(diff.localOnly)}\n` +
-    `标签：${stats.tagRecords} 条记录 · ${stats.tagKinds} 个 ｜ 概念：${stats.conceptRecords} 条记录 · ${stats.conceptKinds} 个`;
+    `标签：${stats.tagRecords} 条记录 · ${stats.tagKinds} 个 ｜ 概念：${stats.conceptRecords} 条记录 · ${stats.conceptKinds} 个` +
+    (catLine ? `\n${catLine}` : '');
   els.importPanel.hidden = false;
 }
 
@@ -649,10 +667,15 @@ async function confirmImport() {
   const strategy = document.querySelector('input[name="import-strategy"]:checked')?.value || 'merge';
   try {
     await downloadBackup();  // 导入前自动备份
-    const { applied } = await mergeNotePackage(pkg, strategy);
+    const { applied, catalogAdded, catalogDomainsAdded, catalogTotal } = await mergeNotePackage(pkg, strategy);
     await refresh();
     const kept = strategy === 'merge' ? `，保留本端更新 ${fmtCount(diff.localNewer.length)} 条` : '';
-    toast(`已${strategy === 'replace' ? '替换' : strategy === 'new' ? '仅新增' : '合并'}导入 ${applied} 条${kept}`);
+    const cat = catalogTotal > 0
+      ? `｜ 概念目录：${(catalogAdded || catalogDomainsAdded)
+        ? `并入 ${catalogAdded} 概念 / ${catalogDomainsAdded} 域（已存本机）`
+        : '本端已齐，无新增'}`
+      : '';
+    toast(`已${strategy === 'replace' ? '替换' : strategy === 'new' ? '仅新增' : '合并'}导入 ${applied} 条${kept}${cat}`);
   } catch (e) {
     toast(`导入失败：${e.message}`, 4200);
   } finally {
@@ -892,6 +915,20 @@ async function initFilterBar() {
       applySearch();
     });
   }
+  // 标签/概念过滤 chips 的 × 清除（事件委托在 filterBar，容器动态增删）
+  els.filterBar.addEventListener('click', (e) => {
+    const x = e.target.closest('.chip-x');
+    if (!x) return;
+    const kind = x.dataset.kind;
+    if (kind === 'tag') listFilters.tag = '';
+    if (kind === 'concept') listFilters.concept = '';
+    // 同步清 URL 参数（避免刷新后过滤复活）
+    const url = new URL(location.href);
+    url.searchParams.delete(kind === 'tag' ? 'tag' : 'concept');
+    history.replaceState(null, '', url);
+    renderTagFilterChips();
+    applySearch();
+  });
 }
 
 function readFilters() {
@@ -900,8 +937,29 @@ function readFilters() {
     book: els.filterBook.value || '',
     dateFrom: els.filterFrom.value || '',
     dateTo: els.filterTo.value || '',
+    tag: listFilters.tag || '',
+    concept: listFilters.concept || '',
   };
+  renderTagFilterChips();
   applySearch();
+}
+
+/** 标签/概念过滤 chips（?tag=/?concept= 入口；× 可清除，需求 20260905-批次二 F3） */
+function renderTagFilterChips() {
+  let host = els.filterBar.querySelector('.filter-tag-chips');
+  if (!listFilters.tag && !listFilters.concept) {
+    if (host) host.remove();
+    return;
+  }
+  if (!host) {
+    host = document.createElement('div');
+    host.className = 'filter-tag-chips';
+    els.filterBar.appendChild(host);
+  }
+  const parts = [];
+  if (listFilters.tag) parts.push(`<span class="btn ghost small tag-chip" data-kind="tag">🏷️ #${esc(listFilters.tag)} <button type="button" class="chip-x" data-kind="tag" aria-label="清除标签过滤">×</button></span>`);
+  if (listFilters.concept) parts.push(`<span class="btn ghost small tag-chip" data-kind="concept">💡 ${esc(listFilters.concept)} <button type="button" class="chip-x" data-kind="concept" aria-label="清除概念过滤">×</button></span>`);
+  host.innerHTML = parts.join('');
 }
 
 function applyQuickFilter(kind) {
@@ -1094,7 +1152,12 @@ els.list.addEventListener('click', async (event) => {
   renderHeader();
   document.title = `${currentType.label} · 读书笔记`;
   renderMdToolbar();
+  // F3 入口：?tag= / ?concept=（详情页 chips 跳转）→ 过滤状态 + 可清除 chips
+  const urlParams = new URLSearchParams(location.search);
+  listFilters.tag = urlParams.get('tag') || '';
+  listFilters.concept = urlParams.get('concept') || '';
   initFilterBar();
+  renderTagFilterChips();
   refresh(); // applySearch() 负责空状态文案（含搜索无结果态）
   loadConceptCatalog();
   getAllProjects().then((ps) => { els.projectList.innerHTML = ps.map((p2) => `<option value="${esc(p2)}"></option>`).join(''); });

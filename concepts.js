@@ -58,6 +58,13 @@ const els = {
   exportText: $('export-text'),
   exportDownload: $('export-download'),
   exportClose: $('export-close'),
+  collectBtn: $('collect-btn'),
+  collectPanel: $('collect-panel'),
+  collectList: $('collect-list'),
+  collectDomain: $('collect-domain'),
+  collectNewDomain: $('collect-new-domain'),
+  collectConfirm: $('collect-confirm'),
+  collectClose: $('collect-close'),
   rebuildPanel: $('rebuild-panel'),
   rebuildStats: $('rebuild-stats'),
   rebuildWarnings: $('rebuild-warnings'),
@@ -316,6 +323,98 @@ function downloadExport() {
   toast('已下载 concepts.yaml（仅回电脑端同步时需要；本机看新图请用「重新计算图谱」）');
 }
 
+/* ── 未编目概念收集（需求 20260905-批次二 F2a）── */
+
+let pendingCollect = [];   // 扫描出的未编目概念 [{id, count}]
+
+/** 扫描本机全部记录的 concepts 引用，与工作副本目录求差 → 未编目列表 */
+async function openCollectPanel() {
+  try {
+    const [notes, catalogConcepts, catalogDomains] = await Promise.all([
+      getAllNotes(),
+      getAllConcepts(),
+      getAllDomains(),
+    ]);
+    const known = new Set(catalogConcepts.map((c) => c.id));
+    const counts = new Map();   // id → 引用记录数
+    for (const n of notes) {
+      for (const c of (Array.isArray(n.concepts) ? n.concepts : [])) {
+        const id = typeof c === 'string' ? c : (c && c.id) || '';
+        if (!id || known.has(id)) continue;
+        counts.set(id, (counts.get(id) || 0) + 1);
+      }
+    }
+    pendingCollect = [...counts.entries()]
+      .map(([id, count]) => ({ id, count }))
+      .sort((a, b) => b.count - a.count || a.id.localeCompare(b.id));
+
+    if (!pendingCollect.length) {
+      toast('没有未编目概念——本机记录引用的概念都已在目录中');
+      return;
+    }
+
+    // 域下拉：现有域 + 新建域；默认按拍板=materials（不存在则首个域 / uncategorized 占位）
+    const hasMaterials = catalogDomains.some((d) => d.id === 'materials');
+    els.collectDomain.innerHTML = catalogDomains.map((d) =>
+      `<option value="${esc(d.id)}"${d.id === 'materials' ? ' selected' : ''}>${esc(d.name || d.id)}</option>`).join('')
+      + '<option value="__new__">➕ 新建域…</option>';
+    if (!catalogDomains.length) {
+      els.collectDomain.innerHTML = '<option value="__new__" selected>➕ 新建域…</option>';
+    } else if (!hasMaterials) {
+      els.collectDomain.value = catalogDomains[0].id;
+    }
+    els.collectNewDomain.hidden = els.collectDomain.value !== '__new__';
+
+    els.collectList.innerHTML = pendingCollect.map((c) => `
+      <label class="chk collect-row"><input type="checkbox" data-cid="${esc(c.id)}" checked>
+        <code>${esc(c.id)}</code><span class="tag-count">${c.count} 条记录引用</span>
+      </label>`).join('')
+      + `<p class="muted">共 ${pendingCollect.length} 个未编目概念（已按引用数排序）</p>`;
+    els.collectConfirm.textContent = `加入目录（${pendingCollect.length}）`;
+    els.collectPanel.hidden = false;
+    els.collectPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    toast(`扫描失败：${err.message}`, 4200);
+  }
+}
+
+/** 确认编目：勾选项 + 域（或新建域）→ 增量并入工作副本并保存 */
+async function confirmCollect() {
+  const chosen = [...els.collectList.querySelectorAll('input[data-cid]:checked')]
+    .map((i) => i.dataset.cid);
+  if (!chosen.length) { toast('未勾选任何概念'); return; }
+
+  let domain = els.collectDomain.value || '';
+  if (domain === '__new__') {
+    domain = els.collectNewDomain.value.trim();
+    if (!domain) { toast('请填写新域 id'); return; }
+  }
+
+  try {
+    const catalog = (await getConceptCatalog()) || { domains: [], concepts: [] };
+    catalog.domains = catalog.domains || [];
+    catalog.concepts = catalog.concepts || [];
+    if (!catalog.domains.some((d) => d.id === domain)) {
+      catalog.domains.push({ id: domain, name: domain });
+    }
+    const existing = new Set(catalog.concepts.map((c) => c.id));
+    let added = 0;
+    for (const id of chosen) {
+      if (existing.has(id)) continue;   // 双保险：只补缺
+      catalog.concepts.push({ id, name: id, domain, aliases: [], keywords: [], related: [], description: '' });
+      existing.add(id);
+      added += 1;
+    }
+    await saveConceptCatalog(catalog);
+    els.collectPanel.hidden = true;
+    pendingCollect = [];
+    await loadCatalog();
+    toast(`已并入 ${added} 个概念到域「${domain}」——点「⚙️ 重新计算图谱」即可在图谱中看到`, 4600);
+  } catch (err) {
+    toast(`编目失败：${err.message}`, 4200);
+  }
+}
+
 /* ── 本机重算图谱（阶段二：无需电脑，浏览器端重算 union 图谱并存本机）── */
 
 /** ISO 时间 → 本地可读「YYYY-MM-DD HH:MM」；解析失败原样返回 */
@@ -334,19 +433,48 @@ function fmtLocalTime(iso) {
  */
 async function rebuildGraph() {
   try {
-    const catalog = await getConceptCatalog();
-    if (!catalog || !(catalog.concepts || []).length) {
-      toast('请先载入概念目录（从 graph.json 载入或上传 JSON）', 3600);
+    const localCat = (await getConceptCatalog()) || { domains: [], concepts: [] };
+    // F2c：基线并集 = graph.json（静态产物）∪ 工作副本——防止在小工作副本上重算把大图打薄
+    let baseGraph = null;
+    try {
+      const resp = await fetch('graph.json', { cache: 'no-store' });
+      if (resp.ok) baseGraph = await resp.json();
+    } catch (e) { /* file:// 或缺失：只用工作副本 */ }
+
+    const domains = new Map((baseGraph && Array.isArray(baseGraph.domains) ? baseGraph.domains : []).map((d) => [d.id, d]));
+    const concepts = new Map((baseGraph && Array.isArray(baseGraph.concepts) ? baseGraph.concepts : []).map((c) => [c.id, c]));
+    let localOnlyDomains = 0;
+    let localOnlyConcepts = 0;
+    for (const d of (localCat.domains || [])) {
+      if (!domains.has(d.id)) { localOnlyDomains += 1; }
+      domains.set(d.id, d);   // 本端条目优先（覆盖同 id）
+    }
+    for (const c of (localCat.concepts || [])) {
+      if (!concepts.has(c.id)) { localOnlyConcepts += 1; }
+      concepts.set(c.id, c);
+    }
+    const merged = {
+      domains: [...domains.values()],
+      concepts: [...concepts.values()],
+    };
+    if (!merged.concepts.length) {
+      toast('请先载入概念目录（从 graph.json 载入 / 上传 JSON / 「收集未编目概念」）', 3600);
       return;
     }
+
     const notes = await getAllNotes('note');
     const result = buildUnionGraph({
-      domains: catalog.domains || [],
-      concepts: catalog.concepts || [],
+      domains: merged.domains,
+      concepts: merged.concepts,
       notes,
     });
     lastRebuild = await saveLocalGraph(result);
-    renderRebuildPanel(lastRebuild);
+    renderRebuildPanel(lastRebuild, {
+      graphJsonConcepts: (baseGraph && Array.isArray(baseGraph.concepts) ? baseGraph.concepts.length : 0),
+      localOnlyDomains,
+      localOnlyConcepts,
+      mergedConcepts: merged.concepts.length,
+    });
     await refreshLocalGraphStatus();
     toast(`本机图谱已构建：${result.stats.notes} 笔记 · ${result.stats.edges} 边`);
   } catch (err) {
@@ -355,7 +483,7 @@ async function rebuildGraph() {
 }
 
 /** 结果面板：统计行（口径同 CLI graph build）＋ warnings 逐条降级提示 */
-function renderRebuildPanel(record) {
+function renderRebuildPanel(record, base = null) {
   const s = (record.graph && record.graph.stats) || {};
   const lines = [
     `✅ 图谱已构建（本机重算 @${fmtLocalTime(record.builtAt)}）`,
@@ -364,6 +492,11 @@ function renderRebuildPanel(record) {
     `🏷️ 用户概念标签笔记 ${s.user_tagged_notes ?? 0} 篇`
       + ` ｜ 用户驱动边 ${s.user_concept_edges ?? 0} ｜ AI 驱动边 ${s.ai_concept_edges ?? 0}`,
   ];
+  if (base) {
+    lines.push(
+      `📚 目录基线：graph.json ${base.graphJsonConcepts} + 本机独有域 ${base.localOnlyDomains}/概念 ${base.localOnlyConcepts}`
+      + ` → 并集 ${base.mergedConcepts} 个概念（防打薄：本机重算不低于静态图目录）`);
+  }
   els.rebuildStats.innerHTML = lines.map((t) => esc(t)).join('<br>');
 
   // 目录缺 aliases/keywords 时自动命中退化（如从 graph.json 载入的目录），逐条提示
@@ -431,6 +564,13 @@ els.loadFileBtn.addEventListener('click', () => els.loadFile.click());
 els.loadFile.addEventListener('change', () => {
   if (els.loadFile.files[0]) loadFromFile(els.loadFile.files[0]);
   els.loadFile.value = '';
+});
+
+els.collectBtn.addEventListener('click', openCollectPanel);
+els.collectClose.addEventListener('click', () => { els.collectPanel.hidden = true; });
+els.collectConfirm.addEventListener('click', confirmCollect);
+els.collectDomain.addEventListener('change', () => {
+  els.collectNewDomain.hidden = els.collectDomain.value !== '__new__';
 });
 
 els.exportBtn.addEventListener('click', openExport);

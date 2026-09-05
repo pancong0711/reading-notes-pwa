@@ -863,6 +863,41 @@ main {
   display: inline-block;
   vertical-align: middle;
 }
+/* ── 标签/概念过滤 chips（type.html 筛选栏；需求 20260905-批次二 F3）── */
+.filter-tag-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.filter-tag-chips .tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+.filter-tag-chips .chip-x {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.filter-tag-chips .chip-x:hover { color: #b00020; }
+
+/* 详情/面板里的 tag chips 为链接（F3）：外观不变，hover 点缀 */
+a.tag {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+a.tag:hover {
+  border-color: var(--accent-strong, #b08d4f);
+  color: var(--accent-strong, #b08d4f);
+}
+
 .mark, mark {
   background: #f7e8c8;
   padding: 0 3px;

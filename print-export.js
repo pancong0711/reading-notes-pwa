@@ -39,18 +39,28 @@ export function scopeLabel(scope, opts = {}) {
 /**
  * 按范围过滤记录（纯函数，不改动入参）。
  * @param {Array<object>} notes  IndexedDB 全量记录（getAllNotes()）
- * @param {object} [opts] { scope, book, type, dateFrom, dateTo }
+ * @param {object} [opts] { scope, book, type, dateFrom, dateTo, project, tag, concept }
  *   - book：与记录的 book 字段全等匹配；
  *   - type：与记录 type 字段全等匹配（缺省视为 note）；
  *   - date：date 闭区间比较（YYYY-MM-DD 字符串）；无日期记录剔除
  * @returns {Array<object>} 过滤后的记录
  */
 export function filterNotesByScope(notes, opts = {}) {
-  const { scope = 'all', book = '', type = '', dateFrom = '', dateTo = '', project = '' } = opts;
+  const { scope = 'all', book = '', type = '', dateFrom = '', dateTo = '', project = '',
+    tag = '', concept = '' } = opts;
   let list = Array.isArray(notes) ? notes.slice() : [];
   if (project) {
     const target = String(project);
     list = list.filter((n) => String(n.project || '') === target);
+  }
+  if (tag) {
+    const target = String(tag);
+    list = list.filter((n) => Array.isArray(n.tags) && n.tags.includes(target));
+  }
+  if (concept) {
+    const target = String(concept);
+    list = list.filter((n) => Array.isArray(n.concepts)
+      && n.concepts.some((c) => (typeof c === 'string' ? c : (c && c.id) || '') === target));
   }
   if (scope === 'book') {
     const target = String(book || '');

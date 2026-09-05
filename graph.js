@@ -33,6 +33,8 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
   var localBuiltAt = '';       // 本机结果的存档时间（generated_at 缺失时展示用）
   var dataModule = null;       // 动态 import 的 data.js（供「清空本机结果」调用）
 
+  var uncataloguedEl = document.getElementById('graph-uncatalogued');
+
   var domainById = {}, colorOf = {};
   var allNodes = [], allLinks = [];
   var books = [];
@@ -562,7 +564,39 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
     renderLegend();
     renderBookFilter();
     update();
+    checkUncatalogued();
     window.addEventListener('resize', resize);
+  }
+
+  /* 未编目概念提示（需求 20260905-批次二 F2a）：
+   * 本机 IndexedDB 记录引用的概念 id 若不在当前图目录中 → 顶部提示条引导去概念管理页收集。 */
+  async function checkUncatalogued() {
+    if (!uncataloguedEl || !dataModule || !rawData) return;
+    try {
+      var notes = await dataModule.getAllNotes();
+      var known = {};
+      (rawData.concepts || []).forEach(function (c) { known[c.id] = true; });
+      var counts = {};
+      var order = [];
+      (notes || []).forEach(function (n) {
+        (n.concepts || []).forEach(function (c) {
+          var id = typeof c === 'string' ? c : (c && c.id) || '';
+          if (!id || known[id]) return;
+          if (!counts[id]) { counts[id] = 0; order.push(id); }
+          counts[id] += 1;
+        });
+      });
+      if (!order.length) { uncataloguedEl.hidden = true; return; }
+      order.sort(function (a, b) { return counts[b] - counts[a] || a.localeCompare(b); });
+      var head = order.slice(0, 5).map(function (id) { return id + '×' + counts[id]; }).join('、');
+      var more = order.length > 5 ? ' 等 ' + order.length + ' 个' : '';
+      uncataloguedEl.innerHTML =
+        '💡 本机记录引用了 <b>' + order.length + '</b> 个未编目概念（' + head + more + '），图谱暂未收录 —— '
+        + '<a href="concepts.html">去概念管理页收集</a>（收集后点「⚙️ 重新计算图谱」即可上图）';
+      uncataloguedEl.hidden = false;
+    } catch (err) {
+      console.warn('[graph] 未编目概念扫描失败:', err);
+    }
   }
 
   async function load() {

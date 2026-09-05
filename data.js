@@ -370,6 +370,56 @@ export async function deleteTag(tag) {
 }
 
 /**
+ * 包内概念目录 → 本机工作副本的**增量并入**（需求 20260905-批次二 F2b）。
+ * 规则：按 id 并集——包内新域/新概念补入，本端已有条目一律保留（不覆盖、不删除）；
+ * 无 conceptCatalog 键 → 原样返回 {added:0,total:0}。
+ * 校验失败抛中文错误（调用方在写笔记之前调用，整体导入 fail-fast，不产生半成品）。
+ * @param {object} json  导入包（含可选 conceptCatalog: {domains, concepts}）
+ * @returns {Promise<{added:number, total:number}>} added=本次新并入条数（域+概念），total=包内概念总数
+ */
+export async function mergeConceptCatalogFromPackage(json) {
+  const pkgCat = json && typeof json === 'object' ? json.conceptCatalog : null;
+  if (!pkgCat || typeof pkgCat !== 'object') return { added: 0, total: 0 };
+  const pkgDomains = Array.isArray(pkgCat.domains) ? pkgCat.domains.filter((d) => d && d.id) : [];
+  const pkgConcepts = Array.isArray(pkgCat.concepts) ? pkgCat.concepts.filter((c) => c && c.id) : [];
+  const total = pkgConcepts.length;
+  if (!pkgDomains.length && !pkgConcepts.length) return { added: 0, total: 0 };
+
+  const local = (await getConceptCatalog()) || { domains: [], concepts: [] };
+  const localDomainIds = new Set((local.domains || []).map((d) => d.id));
+  const localConceptIds = new Set((local.concepts || []).map((c) => c.id));
+  const merged = {
+    domains: (local.domains || []).slice(),
+    concepts: (local.concepts || []).slice(),
+  };
+  let added = 0;          // 新并入概念数（与 CLI concepts_added 同口径）
+  let domainsAdded = 0;   // 新并入域数（与 CLI concept_domains_added 同口径）
+  for (const d of pkgDomains) {
+    const nd = normalizeDomainDef(d);
+    if (!nd.id || localDomainIds.has(nd.id)) continue;
+    merged.domains.push(nd);
+    localDomainIds.add(nd.id);
+    domainsAdded += 1;
+  }
+  for (const c of pkgConcepts) {
+    const nc = normalizeConceptDef(c);
+    if (!nc.id || localConceptIds.has(nc.id)) continue;
+    // 域引用兜底：概念指向的域若两端都没有，归入第一个已有域（无域则建 uncategorized）
+    if (!localDomainIds.has(nc.domain)) {
+      nc.domain = merged.domains.length ? merged.domains[0].id : 'uncategorized';
+    }
+    merged.concepts.push(nc);
+    localConceptIds.add(nc.id);
+    added += 1;
+  }
+  if (!merged.domains.length) {
+    merged.domains.push(normalizeDomainDef({ id: 'uncategorized', name: '未分类' }));
+  }
+  await saveConceptCatalog(merged);
+  return { added, domainsAdded, total };
+}
+
+/**
  * 导入笔记包：清空重建。
  * @param {object|Array} json  { notes: [...], books: [...] } / { notes: [...] } / 直接传笔记数组
  * @returns {Promise<number>}  导入的笔记数量
@@ -377,6 +427,9 @@ export async function deleteTag(tag) {
 export async function importNotePackage(json) {
   if (json && !Array.isArray(json) && json.imageFiles) {
     await ingestImageFiles(json.imageFiles);   // 迁移包图片落仓（渲染经 SW 供图）
+  }
+  if (json && !Array.isArray(json)) {
+    await mergeConceptCatalogFromPackage(json);   // 包内概念目录增量并入（fail-fast，写笔记前）
   }
   const list = Array.isArray(json)
     ? json
@@ -485,12 +538,17 @@ export function summarizePackage(json) {
 /**
  * 按策略应用导入包。策略：merge=智能合并（新增+包内较新覆盖，本端较新保留）
  * / new=仅新增 / replace=完整替换。books 一律按包覆盖。
- * @returns {Promise<{applied:number, diff:object}>}
+ * 包内概念目录（conceptCatalog）一律**增量并入**工作副本：只补缺，不覆盖本端已有
+ * （需求 20260905-批次二 F2b；去敏红线：仅落本机 IndexedDB，不回写服务器/仓库）。
+ * @returns {Promise<{applied:number, diff:object, catalogAdded:number, catalogTotal:number}>}
  */
 export async function mergeNotePackage(json, strategy) {
   if (json && !Array.isArray(json) && json.imageFiles) {
     await ingestImageFiles(json.imageFiles);   // 迁移包图片落仓（两种策略都落，不依赖记录合并结果）
   }
+  const catalogStats = (json && !Array.isArray(json))
+    ? await mergeConceptCatalogFromPackage(json)
+    : { added: 0, domainsAdded: 0, total: 0 };
   const list = Array.isArray(json)
     ? json
     : json && Array.isArray(json.notes) ? json.notes : [];
@@ -512,18 +570,29 @@ export async function mergeNotePackage(json, strategy) {
   if (json && !Array.isArray(json) && Array.isArray(json.books)) {
     await saveBooks(json.books);
   }
-  return { applied, diff };
+  return {
+    applied,
+    diff,
+    catalogAdded: catalogStats.added,
+    catalogDomainsAdded: catalogStats.domainsAdded,
+    catalogTotal: catalogStats.total,
+  };
 }
 
 /**
- * 导出笔记包（含书籍元信息，往返一致）。
- * @returns {Promise<{notes: Array, books: Array, exportedAt: string, schemaVersion: number}>}
+ * 导出笔记包（含书籍元信息 + 概念目录工作副本，往返一致）。
+ * conceptCatalog 为可选字段（向后兼容：旧端导入忽略）；仅携带本地工作副本，
+ * 电脑端 CLI export-json 对称携带 concepts.yaml（去敏约束：包/目录只随用户迁移，不入公开仓）。
+ * @returns {Promise<{notes: Array, books: Array, conceptCatalog?: object, exportedAt: string, schemaVersion: number}>}
  */
 export async function exportNotePackage(opts = {}) {
   const { notes: prefiltered, includeImages = false, fetcher } = opts;
-  const [allNotes, books] = await Promise.all([getAllNotes(), getAllBooksRaw()]);
+  const [allNotes, books, catalog] = await Promise.all([getAllNotes(), getAllBooksRaw(), getConceptCatalog()]);
   const notes = Array.isArray(prefiltered) ? prefiltered : allNotes;
   const pkg = { notes, books, exportedAt: new Date().toISOString(), schemaVersion: 2 };
+  if (catalog && (catalog.concepts || []).length) {
+    pkg.conceptCatalog = { domains: catalog.domains || [], concepts: catalog.concepts || [] };
+  }
   if (includeImages) {
     const { imageFiles } = await collectImageFiles(notes, fetcher);
     if (Object.keys(imageFiles).length) pkg.imageFiles = imageFiles;

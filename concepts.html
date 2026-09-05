@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>概念管理 · 读书笔记</title>
-  <link rel="stylesheet" href="styles.css?v=20260824">
+  <link rel="stylesheet" href="styles.css?v=20260905">
 </head>
 <body>
   <header class="site-header">
@@ -27,6 +27,7 @@
         <button class="btn ghost" id="load-graph-btn" type="button">从 graph.json 载入</button>
         <button class="btn ghost" id="load-file-btn" type="button">上传 JSON 载入</button>
         <input type="file" id="load-file" accept=".json,application/json" hidden>
+        <button class="btn ghost" id="collect-btn" type="button">🧩 收集未编目概念</button>
         <button class="btn ghost" id="rebuild-btn" type="button">⚙️ 重新计算图谱</button>
         <button class="btn ghost" id="export-btn" type="button">导出 concepts.yaml</button>
         <button class="btn primary" id="new-btn" type="button">＋ 新增概念</button>
@@ -107,6 +108,22 @@
       </div>
     </div>
 
+    <!-- 未编目概念收集面板（需求 20260905-批次二 F2a：扫描本机记录引用 → 增量编目） -->
+    <div id="collect-panel" class="type-manage" hidden>
+      <h2>收集未编目概念</h2>
+      <p class="muted">扫描本机全部记录引用的概念 id，列出<b>不在概念目录</b>里的（即图谱暂不收录的）。勾选后并入目录（名称默认＝id，可后改），再点「⚙️ 重新计算图谱」即可在图谱中看到新概念与连边。</p>
+      <div id="collect-list"></div>
+      <div class="field" id="collect-domain-row">
+        <span>并入的域</span>
+        <select id="collect-domain"></select>
+        <input id="collect-new-domain" type="text" placeholder="新域 id（选「➕ 新建域」时填写）" hidden>
+      </div>
+      <div class="editor-actions">
+        <button class="btn primary" id="collect-confirm" type="button">加入目录</button>
+        <button class="btn ghost" id="collect-close" type="button">关闭</button>
+      </div>
+    </div>
+
     <!-- 删除确认对话框 -->
     <div id="delete-panel" class="type-manage" hidden>
       <h2>删除概念</h2>
@@ -132,6 +149,6 @@
   <script>
     document.getElementById('main-nav').innerHTML = NoteTypes.renderNav('concepts');
   </script>
-  <script type="module" src="concepts.js?v=20260825b"></script>
+  <script type="module" src="concepts.js?v=20260905"></script>
 </body>
 </html>

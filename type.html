@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>记录 · 读书笔记</title>
-  <link rel="stylesheet" href="styles.css?v=20260808">
+  <link rel="stylesheet" href="styles.css?v=20260905">
   <style>
     /* 导出/生成面板（范围选择行 + 操作按钮） */
     .export-scope { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
@@ -87,7 +87,8 @@
       </label>
 
       <label class="field">标签
-        <input id="f-tags" type="text" placeholder="逗号分隔，如：光学, 生活篇">
+        <input id="f-tags" type="text" list="tag-history" placeholder="逗号分隔，如：光学, 生活篇（输入时可从既有标签提示）">
+        <datalist id="tag-history"></datalist>
       </label>
 
       <label class="field">项目（可选）
@@ -243,6 +244,6 @@
   <script src="file-warning.js"></script>
   <script src="sw-register.js"></script>
   <script src="types.js"></script>
-  <script type="module" src="type.js?v=20260808"></script>
+  <script type="module" src="type.js?v=20260905"></script>
 </body>
 </html>

@@ -576,3 +576,16 @@
     padding: 8px 10px;
   }
 }
+
+/* ── 未编目概念提示条（需求 20260905-批次二 F2a）── */
+.graph-uncatalogued {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  background: var(--accent-soft, #f3ecdd);
+  border: 1px solid var(--accent, #c9a96e);
+  border-radius: 8px;
+  color: #6b5a35;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.graph-uncatalogued a { color: #8a6d3b; font-weight: 700; }

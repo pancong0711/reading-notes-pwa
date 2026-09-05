@@ -4,7 +4,7 @@
  * 保证口径一致：
  *   · 正文 content 用 markdown-lite 渲染（受控子集、先转义安全）
  *   · readerNote / aiNote 分段展示（AI注 附标注）
- *   · tags chips、concepts chips（id → 名称映射，含来源标注）
+ *   · tags chips、concepts chips（id → 名称映射，含来源标注）——可点击跳记录页按标签/概念过滤（20260905-批次二 F3）
  *   · pages、images 渲染：note.images 为 PWA 相对路径（'assets/…'，CLI sync 已复制）
  *     或 note.imageData（base64）；点击开新标签看大图
  *   · 无内容时占位「（无更多内容）」
@@ -26,7 +26,9 @@ function section(title, html) {
 
 function tagsHtml(tags) {
   if (!Array.isArray(tags) || !tags.length) return '';
-  return `<div class="note-sec"><h4>标签</h4><div class="note-tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div></div>`;
+  // chips 可点击 → 记录页按标签过滤（需求 20260905-批次二 F3）
+  return `<div class="note-sec"><h4>标签</h4><div class="note-tags">${tags.map((t) =>
+    `<a class="tag" href="type.html?t=all&tag=${encodeURIComponent(t)}">${esc(t)}</a>`).join('')}</div></div>`;
 }
 
 function conceptsHtml(concepts, catalogById) {
@@ -35,7 +37,7 @@ function conceptsHtml(concepts, catalogById) {
     const id = typeof c === 'string' ? c : (c && c.id) || '';
     const src = typeof c === 'string' ? 'user' : (c && (c.source || 'user')) || 'user';
     const name = (catalogById && catalogById[id] && catalogById[id].name) || id;
-    return `<span class="tag concept">${esc(name)}<em>${esc(src)}</em></span>`;
+    return `<a class="tag concept" href="type.html?t=all&concept=${encodeURIComponent(id)}">${esc(name)}<em>${esc(src)}</em></a>`;
   }).join('');
   return `<div class="note-sec"><h4>概念</h4><div class="note-tags">${chips}</div></div>`;
 }

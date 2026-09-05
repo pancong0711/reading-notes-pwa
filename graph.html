@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>知识图谱 · 读书笔记</title>
   <link rel="stylesheet" href="styles.css?v=20260815">
-  <link rel="stylesheet" href="graph.css?v=20260825">
+  <link rel="stylesheet" href="graph.css?v=20260905">
 </head>
 <body>
   <header class="site-header">
@@ -32,6 +32,9 @@
       <span class="graph-source-badge" id="graph-source-badge" hidden></span>
       <button type="button" class="graph-source-clear" id="clear-local-btn" hidden>清空本机结果</button>
     </div>
+
+    <!-- 未编目概念提示条（需求 20260905-批次二 F2a：本机记录引用了目录外概念时显示，graph.js 填充） -->
+    <div class="graph-uncatalogued" id="graph-uncatalogued" hidden></div>
 
     <!-- 图区：SVG + 图例叠加层 -->
     <div class="graph-stage" id="graph-stage">
@@ -68,6 +71,6 @@
   </script>
   <!-- D3 本地化（vendor/d3.min.js），禁止 CDN 外链 -->
   <script src="vendor/d3.min.js"></script>
-  <script type="module" src="graph.js?v=20260825b"></script>
+  <script type="module" src="graph.js?v=20260905"></script>
 </body>
 </html>
