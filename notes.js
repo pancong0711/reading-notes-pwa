@@ -339,7 +339,7 @@ els.list.addEventListener('click', async (event) => {
 /* ── 启动 ─────────────────────────────────────────────── */
 
 // 常用书名供 datalist 提示
-const BOOK_HINTS = ['如何测量万物', '百年孤独'];
+const BOOK_HINTS = ['时间简史', '百年孤独'];
 for (const b of BOOK_HINTS) {
   const opt = document.createElement('option');
   opt.value = b;

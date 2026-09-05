@@ -32,7 +32,7 @@
 
   /* 附加字段的元信息（编辑表单渲染用） */
   var FIELD_META = {
-    book:    { label: '书名',     type: 'text',     placeholder: '如：如何测量万物' },
+    book:    { label: '书名',     type: 'text',     placeholder: '如：时间简史' },
     pages:   { label: '页码',     type: 'text',     placeholder: '如：1-30' },
     done:    { label: '已完成',   type: 'checkbox' },
     due:     { label: '截止日期', type: 'date' },
