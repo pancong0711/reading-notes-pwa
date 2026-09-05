@@ -21,6 +21,10 @@
   --shadow: 0 1px 3px rgba(59, 54, 48, 0.07);
   --shadow-hover: 0 3px 10px rgba(59, 54, 48, 0.10);
   --max-width: 760px;
+  /* 桌面宽屏版心（修复轮 R6，人机标准换算）：25寸16:9 宽≈55.3cm × 中区60% ≈33.2cm
+   * @50cm 视距 → 水平全角≈36.8°（±18.4°，落在 ISO 9241-5/HFES 主视区±15°与舒适区±30°之间）
+   * → 25寸1080p（像素间距0.288mm）33.2cm ≈ 1152 CSS px（W3C 参考像素 96dpi@71cm）→ 取 1150px */
+  --max-wide: 1150px;
   /* 阅读字号双轨（需求 20260905-批次三）：
    *  · 流式：--fs-reading 随视口缓增（375px 手机 ≈16px → ≥760px 桌面 ≈17.5px），零交互
    *  · 档位：--fs-mul 用户档位乘数（reading-font.js 读 localStorage 写 <html data-fs>），
@@ -67,7 +71,7 @@ body {
  * 详情页 .note-page(640px) 阅读列不动（行长≈34 字是可读性核心）；图谱页 1200px 特例保持 */
 @media (min-width: 1024px) {
   .container {
-    max-width: 1000px;
+    max-width: var(--max-wide);
   }
 }
 
@@ -929,12 +933,17 @@ a.tag:hover {
 }
 .math-error { color: #b00020; }
 
-/* ── 笔记详情页（note.html：全屏阅读，阅读列居中）──
- * 阅读列 640px：标准档正文 ≈17.5px 下行长 ≈34 字（中文长文舒适区 32-36 字） */
+/* ── 笔记详情页（note.html：全屏阅读）──
+ * 版心统一（修复轮 R8）：卡片随 .container 同宽（760/1150），与列表/热力图等页一致；
+ * 正文可读性由「卡内居中窄栏」保证：直接子元素 max-width 640px（标准档 ≈36 字行长） */
 .note-page {
-  max-width: 640px;
-  margin: 0 auto;
+  margin: 0;
   padding: 14px 4px 40px;
+}
+.note-page-body > * {
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
 }
 .note-page-top {
   display: flex;
@@ -996,17 +1005,35 @@ a.tag:hover {
   font-size: calc(var(--fs-reading) * var(--fs-mul, 1));   /* 流式 × 档位（批次三） */
   line-height: 1.9;
 }
-.note-page-body .note-md { font-size: inherit; }   /* 详情正文继承阅读字号（覆盖 .note-md 13px 紧凑档） */
+.note-page-body .note-md { font-size: 1em; }   /* 详情正文继承阅读字号（覆盖 .note-md 13px 紧凑档） */
 .note-page-body .note-sec { margin-top: 18px; }
-.note-page-body .note-sec h4 { font-size: 13px; }
+/* R5：卡内排版全部 em 相对（正文=1em 基准）——Aa 四档下标题/段落/表格/代码整体等比、层级不倒挂 */
+.note-page-body .note-sec h4 { font-size: 0.8em; letter-spacing: 0.5px; }
+.note-page-body .note-md h1, .note-page-body .note-md h2,
+.note-page-body .note-md h3, .note-page-body .note-md h4 {
+  font-size: 1.05em;
+}
+.note-page-body .note-md h1 { font-size: 1.28em; }
+.note-page-body .note-md h2 { font-size: 1.15em; }
+.note-page-body .note-md h3 { font-size: 1.05em; }
+.note-page-body .note-md h4 { font-size: 1em; }
+.note-page-body .note-md code { font-size: 0.85em; }
+.note-page-body .note-md pre { font-size: 0.85em; }
+.note-page-body .note-md th, .note-page-body .note-md td { font-size: 0.88em; }
 .note-page-body img.note-detail-img { max-width: 100%; border-radius: 10px; }
+/* R8 多端：宽表在窄屏内横向滚动（不撑破卡片） */
+.note-page-body .note-md table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
 
 /* ── 返回顶部 FAB（note.html；需求 20260905-②）──
  * 右下角圆形悬浮：下滑超阈值（JS 控制 .show）淡入，点击平滑回顶。 */
 .back-top-fab {
   position: fixed;
   right: 18px;
-  bottom: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));   /* 全面屏安全区（R8） */
   width: 44px;
   height: 44px;
   border-radius: 50%;

@@ -91,9 +91,20 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
     colorOf = {};
     (rawData.domains || []).forEach(function (d) {
       domainById[d.id] = d;
-      // 修复轮 R2：无色域按 id 稳定哈希取色（互异），不再统一灰
-      colorOf[d.id] = d.color || (dataModule && dataModule.domainColorFor
-        ? dataModule.domainColorFor(d.id) : '#b8b2a6');
+      colorOf[d.id] = d.color || '';   // 第一遍：只收显式色（修复轮 R2b）
+    });
+    // 第二遍：无色域按 id 哈希取色并排除已占用——显式色/旧数据/外部数据零撞色（R2b）
+    var usedColors = {};
+    Object.keys(colorOf).forEach(function (id) {
+      if (colorOf[id]) usedColors[colorOf[id]] = true;
+    });
+    Object.keys(colorOf).forEach(function (id) {
+      if (!colorOf[id]) {
+        colorOf[id] = (dataModule && dataModule.domainColorFor)
+          ? dataModule.domainColorFor(id, Object.keys(usedColors))
+          : '#b8b2a6';
+        usedColors[colorOf[id]] = true;
+      }
     });
 
     // 概念 → 笔记集合（用于按书/搜索过滤后重新计数）
