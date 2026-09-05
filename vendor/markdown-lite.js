@@ -170,7 +170,13 @@ function blocks(lines) {
       const rows = [];
       let j = i + 2;
       while (j < lines.length && lines[j].includes('|')) {
-        const cells = lines[j].split('|').map((s) => s.trim());
+        // 数据行与表头对称剥除首尾竖线产生的空单元格（修复表格错位一格：
+        // `| a | b |` split 后首尾各一个 ''，表头剥了而数据行没剥 → tbody 整体右移一格）
+        let cells = lines[j].split('|').map((s) => s.trim());
+        if (cells.length && cells[0] === '') cells.shift();
+        if (cells.length && cells[cells.length - 1] === '') cells.pop();
+        while (cells.length < head.length) cells.push('');                    // 参差行补空到表头列数
+        if (cells.length > head.length) cells = cells.slice(0, head.length);  // 超出截断到表头列数
         rows.push(`<tr>${cells.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`);
         j++;
       }
