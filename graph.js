@@ -91,7 +91,9 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
     colorOf = {};
     (rawData.domains || []).forEach(function (d) {
       domainById[d.id] = d;
-      colorOf[d.id] = d.color || '#b8b2a6';
+      // 修复轮 R2：无色域按 id 稳定哈希取色（互异），不再统一灰
+      colorOf[d.id] = d.color || (dataModule && dataModule.domainColorFor
+        ? dataModule.domainColorFor(d.id) : '#b8b2a6');
     });
 
     // 概念 → 笔记集合（用于按书/搜索过滤后重新计数）
@@ -336,7 +338,7 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
         var hidden = hiddenDomains[d.id];
         return '<button type="button" class="graph-legend-item' + (hidden ? ' off' : '') +
           '" data-domain="' + esc(d.id) + '">' +
-          '<span class="dot" style="background:' + esc(d.color || '#b8b2a6') + '"></span>' +
+          '<span class="dot" style="background:' + esc(colorOf[d.id] || d.color || '#b8b2a6') + '"></span>' +
           '<span class="name">' + esc(d.name) + '</span>' +
           '<span class="count">' + (d.note_count || 0) + '</span></button>';
       }).join('');

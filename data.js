@@ -99,6 +99,26 @@ function openDB() {
   return _dbPromise;
 }
 
+/* 域调色板（修复轮 R2）：与 concepts.yaml 现有 10 色一致 + 2 备用；
+ * 新建域取未占用色；渲染端对无色域按 id 稳定哈希取色（旧数据/外部数据也能互异） */
+export const DOMAIN_PALETTE = [
+  '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#10b981', '#6366f1',
+  '#84cc16', '#3b82f6', '#0ea5e9', '#f97316', '#ec4899', '#14b8a6',
+];
+
+/** 域 id → 调色板稳定色（按码点和哈希；两端 JS/Python 同算法，可差分） */
+export function domainColorFor(id, exclude = []) {
+  const key = String(id || '');
+  const sum = [...key].reduce((acc, ch) => acc + (ch.codePointAt(0) || 0), 0);
+  const used = new Set(exclude);
+  if (!used.size) return DOMAIN_PALETTE[sum % DOMAIN_PALETTE.length];
+  for (let i = 0; i < DOMAIN_PALETTE.length; i++) {
+    const c = DOMAIN_PALETTE[(sum + i) % DOMAIN_PALETTE.length];
+    if (!used.has(c)) return c;
+  }
+  return DOMAIN_PALETTE[sum % DOMAIN_PALETTE.length];
+}
+
 /** 规整自由标签：兼容字符串/对象形态（手写 JSON 变体，需求 20260905-批次一 F1），去空白、去重、过滤图片路径/文件名噪音（导出供差分测试）
  *  兼容形态：
  *    · "物理,光学" / "物理；光学、材料" —— 按 ，,;；、 切分

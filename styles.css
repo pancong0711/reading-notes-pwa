@@ -36,6 +36,13 @@ html[data-fs='xlarge'] { --fs-mul: 1.29; }
   box-sizing: border-box;
 }
 
+/* hidden 属性全局兜底（修复轮 R1）：任何 class 设置了 display（如 .fs-pop 的 flex）
+ * 都会压过 UA 对 [hidden] 的 display:none——作者样式优先级高于 UA 样式。
+ * 统一 !important 兜底，杜绝"hidden 失效面板常开"这类 bug（审计于 2026-09-05）。 */
+[hidden] {
+  display: none !important;
+}
+
 html {
   -webkit-text-size-adjust: 100%;
 }
@@ -54,6 +61,14 @@ body {
   max-width: var(--max-width);
   margin: 0 auto;
   padding: 0 20px;
+}
+
+/* 桌面宽屏：放宽容器上限（修复轮 R4 方案 A）——列表/热力图/书页/概念管理受益；
+ * 详情页 .note-page(640px) 阅读列不动（行长≈34 字是可读性核心）；图谱页 1200px 特例保持 */
+@media (min-width: 1024px) {
+  .container {
+    max-width: 1000px;
+  }
 }
 
 /* ---------- 顶部导航 ---------- */

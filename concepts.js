@@ -11,6 +11,7 @@
  * 校验规则与 CLI concept_catalog.py 一致（data.js 数据层实现）。
  */
 import {
+  domainColorFor,
   getConceptCatalog,
   saveConceptCatalog,
   getAllConcepts,
@@ -395,7 +396,12 @@ async function confirmCollect() {
     catalog.domains = catalog.domains || [];
     catalog.concepts = catalog.concepts || [];
     if (!catalog.domains.some((d) => d.id === domain)) {
-      catalog.domains.push({ id: domain, name: domain });
+      // 修复轮 R2：新建域自动取未占用色（随目录导出，CLI graph build 同样带色）
+      catalog.domains.push({
+        id: domain,
+        name: domain,
+        color: domainColorFor(domain, catalog.domains.map((d) => d.color).filter(Boolean)),
+      });
     }
     const existing = new Set(catalog.concepts.map((c) => c.id));
     let added = 0;
@@ -433,47 +439,45 @@ function fmtLocalTime(iso) {
  */
 async function rebuildGraph() {
   try {
-    const localCat = (await getConceptCatalog()) || { domains: [], concepts: [] };
-    // F2c：基线并集 = graph.json（静态产物）∪ 工作副本——防止在小工作副本上重算把大图打薄
+    let localCat = (await getConceptCatalog()) || { domains: [], concepts: [] };
+    // 静态 graph.json：仅作（a）空副本引导的候选（b）防打薄对比参照——不并入基线（修复轮 R3 方案 A：
+    // 删除语义优先——概念管理里删掉的域/概念，重算不再从静态文件复活）
     let baseGraph = null;
     try {
       const resp = await fetch('graph.json', { cache: 'no-store' });
       if (resp.ok) baseGraph = await resp.json();
     } catch (e) { /* file:// 或缺失：只用工作副本 */ }
+    const baseCount = baseGraph && Array.isArray(baseGraph.concepts) ? baseGraph.concepts.length : 0;
 
-    const domains = new Map((baseGraph && Array.isArray(baseGraph.domains) ? baseGraph.domains : []).map((d) => [d.id, d]));
-    const concepts = new Map((baseGraph && Array.isArray(baseGraph.concepts) ? baseGraph.concepts : []).map((c) => [c.id, c]));
-    let localOnlyDomains = 0;
-    let localOnlyConcepts = 0;
-    for (const d of (localCat.domains || [])) {
-      if (!domains.has(d.id)) { localOnlyDomains += 1; }
-      domains.set(d.id, d);   // 本端条目优先（覆盖同 id）
-    }
-    for (const c of (localCat.concepts || [])) {
-      if (!concepts.has(c.id)) { localOnlyConcepts += 1; }
-      concepts.set(c.id, c);
-    }
-    const merged = {
-      domains: [...domains.values()],
-      concepts: [...concepts.values()],
-    };
-    if (!merged.concepts.length) {
-      toast('请先载入概念目录（从 graph.json 载入 / 上传 JSON / 「收集未编目概念」）', 3600);
-      return;
+    let usedBootstrap = false;
+    if (!(localCat.concepts || []).length) {
+      // 空工作副本：显式确认后以 graph.json 为基线引导（不静默复活）
+      if (baseCount) {
+        const ok = confirm(`概念目录工作副本为空：以 graph.json（${baseCount} 概念）为基线重算？\n（取消则先去「从 graph.json 载入 / 上传 JSON / 收集未编目概念」建目录）`);
+        if (!ok) { toast('已取消重算'); return; }
+        localCat = {
+          domains: (baseGraph.domains || []).map((d) => ({ ...d })),
+          concepts: (baseGraph.concepts || []).map((c) => ({ ...c })),
+        };
+        usedBootstrap = true;
+      } else {
+        toast('请先载入概念目录（从 graph.json 载入 / 上传 JSON / 「收集未编目概念」）', 3600);
+        return;
+      }
     }
 
     const notes = await getAllNotes('note');
     const result = buildUnionGraph({
-      domains: merged.domains,
-      concepts: merged.concepts,
+      domains: localCat.domains || [],
+      concepts: localCat.concepts || [],
       notes,
     });
     lastRebuild = await saveLocalGraph(result);
     renderRebuildPanel(lastRebuild, {
-      graphJsonConcepts: (baseGraph && Array.isArray(baseGraph.concepts) ? baseGraph.concepts.length : 0),
-      localOnlyDomains,
-      localOnlyConcepts,
-      mergedConcepts: merged.concepts.length,
+      usedBootstrap,
+      localConcepts: (localCat.concepts || []).length,
+      baseCount,
+      baseMissingAliases: !usedBootstrap && baseCount > (localCat.concepts || []).length,
     });
     await refreshLocalGraphStatus();
     toast(`本机图谱已构建：${result.stats.notes} 笔记 · ${result.stats.edges} 边`);
@@ -493,9 +497,14 @@ function renderRebuildPanel(record, base = null) {
       + ` ｜ 用户驱动边 ${s.user_concept_edges ?? 0} ｜ AI 驱动边 ${s.ai_concept_edges ?? 0}`,
   ];
   if (base) {
-    lines.push(
-      `📚 目录基线：graph.json ${base.graphJsonConcepts} + 本机独有域 ${base.localOnlyDomains}/概念 ${base.localOnlyConcepts}`
-      + ` → 并集 ${base.mergedConcepts} 个概念（防打薄：本机重算不低于静态图目录）`);
+    if (base.usedBootstrap) {
+      lines.push(`📚 目录基线：空工作副本 → 已按确认以 graph.json（${base.baseCount} 概念）引导（本次仅一次，后续重算以工作副本为准）`);
+    } else {
+      lines.push(`📚 目录基线：工作副本 ${base.localConcepts} 概念（静态图 graph.json ${base.baseCount} 概念）`);
+      if (base.baseMissingAliases) {
+        lines.push('⚠️ 工作副本概念数少于静态图——如非有意删减，可「从 graph.json 载入」补全后重算（删除语义以工作副本为准，不再强制并集）');
+      }
+    }
   }
   els.rebuildStats.innerHTML = lines.map((t) => esc(t)).join('<br>');
 
