@@ -27,6 +27,7 @@ import { renderNoteDetailInto } from './note-detail.js';
 import { filterNotesByScope, buildPrintHtml, buildMarkdownDraft, scopeLabel } from './print-export.js';
 import { BUTTONS, wrapSelection, renderPreview } from './md-toolbar.js';
 import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
+import { mountDataActions } from './data-actions.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -49,45 +50,6 @@ const els = {
   fType: $('f-type'),
   newBtn: $('new-btn'),
   emptyNewBtn: $('empty-new-btn'),
-  manageBtn: $('manage-btn'),
-  manage: $('type-manage'),
-  tagManageBtn: $('tag-manage-btn'),
-  tagManage: $('tag-manage'),
-  tagList: $('tag-list'),
-  tagManageClose: $('tag-manage-close'),
-  typeList: $('type-list'),
-  typeAddForm: $('type-add-form'),
-  tKey: $('t-key'),
-  tLabel: $('t-label'),
-  tIcon: $('t-icon'),
-  tFields: $('t-fields'),
-  manageClose: $('type-manage-close'),
-  exportBtn: $('export-btn'),
-  backupPanel: $('backup-panel'),
-  backupBook: $('backup-book'),
-  backupType: $('backup-type'),
-  backupFrom: $('backup-from'),
-  backupTo: $('backup-to'),
-  backupImages: $('backup-images'),
-  backupStats: $('backup-stats'),
-  backupExportBtn: $('backup-export-btn'),
-  backupClose: $('backup-close'),
-  exportPdfBtn: $('export-pdf-btn'),
-  exportPanel: $('export-panel'),
-  exportBook: $('export-book'),
-  exportType: $('export-type'),
-  exportFrom: $('export-from'),
-  exportTo: $('export-to'),
-  exportPrintBtn: $('export-print-btn'),
-  exportMdBtn: $('export-md-btn'),
-  exportClose: $('export-close'),
-  importBtn: $('import-btn'),
-  importFile: $('import-file'),
-  syncBtn: $('sync-btn'),
-  importPanel: $('import-panel'),
-  importDiffText: $('import-diff-text'),
-  importConfirm: $('import-confirm'),
-  importCancel: $('import-cancel'),
   photoInput: $('photo-input'),
   photoBtn: $('photo-btn'),
   photoPreview: $('photo-preview'),
@@ -100,7 +62,6 @@ const els = {
   projectList: $('project-list'),
   tagHistory: $('tag-history'),
   filterBar: $('filter-bar'),
-  importStatus: $('import-status'),
   filterProject: $('filter-project'),
   filterBook: $('filter-book'),
   filterFrom: $('filter-from'),
@@ -544,336 +505,6 @@ async function askAI() {
 }
 
 /* ── 类型管理面板 ── */
-function renderTypeManager() {
-  const rows = NoteTypes.getTypes(false).map((t) => {
-    const tag = t.builtin
-      ? '<span class="tag">内置</span>'
-      : `<button class="btn ghost small danger" data-rm="${esc(t.key)}">删除</button>`;
-    return `<div class="type-row">
-        <span class="type-icon">${esc(t.icon)}</span>
-        <span class="type-label">${esc(t.label)} <code>${esc(t.key)}</code></span>
-        <span class="type-fields">${(t.fields || []).map(esc).join(' / ') || '—'}</span>
-        ${tag}
-      </div>`;
-  }).join('');
-  els.typeList.innerHTML = rows || '<p class="empty">暂无类型</p>';
-
-  // 附加字段复选（新增表单）
-  els.tFields.innerHTML = FIELD_KEYS.map((f) => {
-    const m = NoteTypes.fieldMeta(f);
-    return `<label class="chk"><input type="checkbox" value="${f}" checked> ${esc(m.label)}</label>`;
-  }).join('');
-}
-
-function openManager() {
-  renderTypeManager();
-  els.manage.hidden = false;
-}
-
-/* ── 标签整理面板 ── */
-async function renderTagManager() {
-  const tags = await getAllTags();
-  if (!tags.length) {
-    els.tagList.innerHTML = '<p class="empty">暂无标签</p>';
-    return;
-  }
-  els.tagList.innerHTML = tags.map((t) => `
-    <div class="tag-row" data-tag="${esc(t.tag)}">
-      <input class="tag-rename" value="${esc(t.tag)}" aria-label="重命名标签">
-      <span class="tag-count">${t.count} 条</span>
-      <button class="btn ghost small" data-act="rename" type="button">重命名</button>
-      <button class="btn ghost small danger" data-act="delete" type="button">删除</button>
-    </div>`).join('');
-}
-
-async function openTagManager() {
-  await renderTagManager();
-  els.tagManage.hidden = false;
-}
-
-/* ── 导入 / 导出 / 同步 ── */
-
-/* ── 导入 / 导出 / 同步（含差异对比与策略选择）────────── */
-
-/** 当前待确认的导入包（对话框打开期间缓存） */
-let pendingImport = null;
-
-function fmtCount(n) {
-  return n == null || n === 0 ? 0 : n;
-}
-
-/** 下载当前本地数据备份（导入前自动执行） */
-async function downloadBackup(prefix = '读书笔记-导入前备份') {
-  const pkg = await exportNotePackage();
-  const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${prefix}-${todayStr()}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-/**
- * 打开导入对比对话框：先 diff，展示统计与策略，确认后执行。
- * @param {object} pkg 导入包
- * @param {string} source 来源描述（从电脑导入 / 导入文件）
- */
-let importSource = '';
-
-async function openImportDialog(pkg, source) {
-  importSource = source;
-  const diff = await diffNotePackage(pkg);
-  pendingImport = { pkg, diff };
-  const list = Array.isArray(pkg.notes) ? pkg.notes : [];
-  const at = pkg.exportedAt ? `（导出时间 ${String(pkg.exportedAt).slice(0, 16).replace('T', ' ')}）` : '';
-  const stats = summarizePackage(pkg);   // 标签/概念规模（需求 20260905-批次一 F1）
-  const catLine = (pkg && pkg.conceptCatalog && Array.isArray(pkg.conceptCatalog.concepts))
-    ? `包内概念目录：${(pkg.conceptCatalog.domains || []).length} 域 · ${pkg.conceptCatalog.concepts.length} 概念（导入将增量并入本机，不动服务器）`
-    : '';
-  els.importDiffText.textContent =
-    `来源：${source}，包内 ${list.length} 条${at}\n` +
-    `新增 ${fmtCount(diff.added.length)} ｜ 更新 ${fmtCount(diff.updated.length)} ｜ ` +
-    `本端更新 ${fmtCount(diff.localNewer.length)} ｜ 不变 ${fmtCount(diff.unchanged)} ｜ 本端独有 ${fmtCount(diff.localOnly)}\n` +
-    `标签：${stats.tagRecords} 条记录 · ${stats.tagKinds} 个 ｜ 概念：${stats.conceptRecords} 条记录 · ${stats.conceptKinds} 个` +
-    (catLine ? `\n${catLine}` : '');
-  els.importPanel.hidden = false;
-}
-
-function closeImportDialog() {
-  els.importPanel.hidden = true;
-  pendingImport = null;
-}
-
-/**
- * 从电脑导入：拉取服务器上的 export.json（由 `cli sync` 生成），
- * 弹出差异对比对话框（可合并/仅新增/完整替换），确认后执行。
- * fetch 用 no-store 并依赖 SW 对 export.json 的 network-first，避免旧缓存。
- */
-async function syncFromCli() {
-  const resp = await fetch('./export.json', { cache: 'no-store' });
-  if (!resp.ok) {
-    throw new Error(`服务器上没有 export.json（HTTP ${resp.status}）——先在 CLI 运行「sync」命令生成`);
-  }
-  const pkg = await resp.json();
-  const list = Array.isArray(pkg.notes) ? pkg.notes : [];
-  if (!list.length) throw new Error('导出包为空');
-  await openImportDialog(pkg, '从电脑导入');
-}
-
-async function doImport(file) {
-  try {
-    const json = JSON.parse(await file.text());
-    const list = Array.isArray(json) ? json : (json && Array.isArray(json.notes) ? json.notes : []);
-    if (!list.length) throw new Error('导入包为空');
-    await openImportDialog(json, '导入文件');
-  } catch (e) {
-    toast(`导入失败：${e.message}`);
-  }
-}
-
-/** 确认导入：备份 → 按所选策略应用 → 刷新 */
-async function confirmImport() {
-  if (!pendingImport) return;
-  const { pkg, diff } = pendingImport;
-  const strategy = document.querySelector('input[name="import-strategy"]:checked')?.value || 'merge';
-  try {
-    await downloadBackup();  // 导入前自动备份
-    const { applied, catalogAdded, catalogDomainsAdded, catalogTotal } = await mergeNotePackage(pkg, strategy);
-    await refresh();
-    const kept = strategy === 'merge' ? `，保留本端更新 ${fmtCount(diff.localNewer.length)} 条` : '';
-    const cat = catalogTotal > 0
-      ? `｜ 概念目录：${(catalogAdded || catalogDomainsAdded)
-        ? `并入 ${catalogAdded} 概念 / ${catalogDomainsAdded} 域（已存本机）`
-        : '本端已齐，无新增'}`
-      : '';
-    const label = strategy === 'replace' ? '替换' : strategy === 'new' ? '仅新增' : '合并';
-    toast(`已${label}导入 ${applied} 条${kept}${cat}`);
-    if (els.importStatus) {
-      els.importStatus.textContent = `✅ 已${label}导入 ${applied} 条${kept}${cat} ｜ 来源：${importSource}`;
-      els.importStatus.hidden = false;
-    }
-  } catch (e) {
-    toast(`导入失败：${e.message}`, 4200);
-  } finally {
-    closeImportDialog();
-  }
-}
-
-/* ── 备份 / 迁移包（需求：PWA 图片自包含与同步语义）────────────── */
-
-/** 打开面板：填充书/类型下拉与统计行 */
-async function openBackupPanel() {
-  const books = await getAllBooks();
-  els.backupBook.innerHTML = '<option value="">（选择书）</option>' +
-    books.map((b) => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
-  els.backupType.innerHTML = NoteTypes.getTypes(false)
-    .map((t) => `<option value="${esc(t.key)}">${t.icon} ${esc(t.label)}</option>`).join('');
-  if (currentType) els.backupType.value = currentType.key;
-  els.backupPanel.hidden = false;
-  await refreshBackupStats();
-}
-
-function readBackupScope() {
-  const scope = document.querySelector('input[name="backup-scope"]:checked')?.value || 'all';
-  return {
-    scope,
-    book: els.backupBook.value || '',
-    type: els.backupType.value || '',
-    dateFrom: els.backupFrom.value || '',
-    dateTo: els.backupTo.value || '',
-    label: scope === 'book' ? (els.backupBook.selectedOptions[0]?.textContent || '某本书')
-      : scope === 'type' ? (NoteTypes.getType(els.backupType.value)?.label || '某类型')
-      : scope === 'date' ? scopeLabel('date', { dateFrom: els.backupFrom.value, dateTo: els.backupTo.value })
-      : '全部',
-  };
-}
-
-/** 统计行：N 条记录 · M 张图片（范围内引用去重） */
-async function refreshBackupStats() {
-  const scope = readBackupScope();
-  const all = await getAllNotes();
-  const list = filterNotesByScope(all, scope);
-  const imgCount = new Set();
-  for (const n of list) for (const img of (n.images || [])) imgCount.add(String(img));
-  const withImg = list.filter((n) => (n.images && n.images.length) || n.imageData).length;
-  els.backupStats.textContent = `共 ${list.length} 条记录 ｜ ${imgCount.size} 张引用图片（${withImg} 条带图）`
-    + (els.backupImages.checked ? ' ｜ ☑ 含图片' : ' ｜ 不含图片');
-}
-
-/** 导出迁移包：范围过滤 → exportNotePackage({notes, includeImages}) → 下载 */
-async function doBackupExport() {
-  try {
-    const scope = readBackupScope();
-    const all = await getAllNotes();
-    const list = filterNotesByScope(all, scope);
-    if (!list.length) { toast('范围内没有记录，无法导出'); return; }
-    const includeImages = els.backupImages.checked;
-    els.backupExportBtn.disabled = true;
-    els.backupExportBtn.textContent = '打包中…';
-    const pkg = await exportNotePackage({ notes: list, includeImages });
-    const nImg = pkg.imageFiles ? Object.keys(pkg.imageFiles).length : 0;
-    const fileLabel = String(scope.label).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-');
-    const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `读书笔记-迁移包-${fileLabel}-${todayStr().replace(/-/g, '')}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    els.backupPanel.hidden = true;
-    toast(`已导出迁移包：${list.length} 条${includeImages ? `（含图片 ${nImg} 张）` : ''}`);
-  } catch (e) {
-    toast(`导出失败：${e.message}`, 4200);
-  } finally {
-    els.backupExportBtn.disabled = false;
-    els.backupExportBtn.textContent = '⬇ 导出笔记包';
-  }
-}
-
-/* ── 导出 / 生成（打印草稿 / 下载书稿 md）────────────── */
-
-/** 概念目录转 catalogById（renderNoteDetail 用 id → 名称映射） */
-function catalogByIdMap() {
-  const map = {};
-  conceptCatalog.forEach((c) => { map[c.id] = c; });
-  return map;
-}
-
-/** 填充导出面板的书 / 类型下拉（打开时刷新） */
-async function renderExportSelects() {
-  const books = await getAllBooks();
-  els.exportBook.innerHTML = '<option value="">（选择书）</option>' +
-    books.map((b) => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
-  els.exportType.innerHTML = NoteTypes.getTypes(false)
-    .map((t) => `<option value="${esc(t.key)}">${t.icon} ${esc(t.label)}</option>`).join('');
-  if (currentType) els.exportType.value = currentType.key;  // 默认选中当前类型
-}
-
-/** 读取当前选择的导出范围配置 */
-function readExportScope() {
-  const scope = document.querySelector('input[name="export-scope"]:checked')?.value || 'all';
-  const book = els.exportBook.value || '';
-  const type = els.exportType.value || '';
-  const dateFrom = els.exportFrom.value || '';
-  const dateTo = els.exportTo.value || '';
-  let label = '全部';
-  if (scope === 'book') {
-    label = els.exportBook.selectedOptions[0]?.textContent || book;
-  } else if (scope === 'type') {
-    label = NoteTypes.getType(type)?.label || type;
-  } else if (scope === 'date') {
-    label = scopeLabel('date', { dateFrom, dateTo });
-  }
-  return { scope, book, type, dateFrom, dateTo, label };
-}
-
-/** 把打印 HTML 写入隐藏 iframe 并触发打印（避免弹窗拦截）；打印关闭后移除 */
-function printHtmlFrame(html) {
-  const frame = document.createElement('iframe');
-  frame.style.position = 'fixed';
-  frame.style.right = '0';
-  frame.style.bottom = '0';
-  frame.style.width = '0';
-  frame.style.height = '0';
-  frame.style.border = '0';
-  document.body.appendChild(frame);
-  const doc = frame.contentDocument || frame.contentWindow.document;
-  doc.open();
-  doc.write(html);
-  // 注入 base 指向当前页面，让详情里的相对图片（assets/…）按 app/pwa/ 解析
-  const base = doc.createElement('base');
-  base.href = location.href;
-  if (doc.head) doc.head.appendChild(base);
-  doc.close();
-  // 给样式/图片一点渲染时间；部分浏览器 print() 会阻塞到打印对话框关闭
-  setTimeout(() => {
-    try {
-      frame.contentWindow.focus();
-      frame.contentWindow.print();
-    } catch (e) {
-      toast(`打印失败：${e.message}`, 4200);
-    }
-    frame.remove();
-  }, 200);
-}
-
-/** 打印草稿：按范围取数 → 组装可打印 HTML → 打印窗口（浏览器另存 PDF） */
-async function doPrintDraft() {
-  const scope = readExportScope();
-  const all = await getAllNotes();
-  const list = filterNotesByScope(all, scope);
-  if (!list.length) {
-    toast('范围内没有记录，无法生成打印草稿');
-    return;
-  }
-  const title = `读书笔记 · ${scopeLabel(scope.scope, { label: scope.label, dateFrom: scope.dateFrom, dateTo: scope.dateTo })}`;
-  const html = buildPrintHtml(list, title, catalogByIdMap());
-  printHtmlFrame(html);
-  els.exportPanel.hidden = true;
-  toast('已打开打印窗口，可在打印对话框选择「另存为 PDF」');
-}
-
-/** 下载书稿（md）：按范围拼 markdown，文件名 书稿-<范围描述>-YYYYMMDD.md */
-async function doDownloadMd() {
-  const scope = readExportScope();
-  const all = await getAllNotes();
-  const list = filterNotesByScope(all, scope);
-  if (!list.length) {
-    toast('范围内没有记录，无法下载书稿');
-    return;
-  }
-  const title = `读书笔记 · ${scopeLabel(scope.scope, { label: scope.label, dateFrom: scope.dateFrom, dateTo: scope.dateTo })}`;
-  const md = buildMarkdownDraft(list, title);
-  const fileLabel = String(scope.label).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-');
-  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `书稿-${fileLabel}-${todayStr().replace(/-/g, '')}.md`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  els.exportPanel.hidden = true;
-  toast('已下载书稿 markdown');
-}
-
 
 /** 类型下拉（新建必选 / 编辑可改；20260911 ⑦） */
 function fillTypeOptions(selectedKey) {
@@ -1036,99 +667,10 @@ els.searchInput.addEventListener('input', (e) => {
 });
 els.cancelBtn.addEventListener('click', closeEditor);
 els.saveBtn.addEventListener('click', saveRecord);
-els.manageBtn.addEventListener('click', openManager);
-els.manageClose.addEventListener('click', () => { els.manage.hidden = true; });
-els.tagManageBtn.addEventListener('click', openTagManager);
-els.tagManageClose.addEventListener('click', () => { els.tagManage.hidden = true; });
 
-els.typeAddForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const fields = [...els.tFields.querySelectorAll('input:checked')].map((i) => i.value);
-  try {
-    const t = NoteTypes.addType({
-      key: els.tKey.value,
-      label: els.tLabel.value,
-      icon: els.tIcon.value,
-      fields,
-    });
-    toast(`已添加类型「${t.label}」`);
-    els.tKey.value = ''; els.tLabel.value = ''; els.tIcon.value = '';
-    renderTypeManager();
-    renderHeader();
-  } catch (err) {
-    toast(err.message, 4200);
-  }
-});
 
-els.typeList.addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-rm]');
-  if (!btn) return;
-  const key = btn.dataset.rm;
-  if (!confirm(`删除自定义类型「${key}」？已有该类型的记录将不再出现在导航中（数据保留）。`)) return;
-  NoteTypes.removeType(key);
-  renderTypeManager();
-  renderHeader();
-});
 
-els.tagList.addEventListener('click', async (e) => {
-  const row = e.target.closest('.tag-row');
-  const btn = e.target.closest('[data-act]');
-  if (!row || !btn) return;
-  const oldTag = row.dataset.tag;
-  const input = row.querySelector('.tag-rename');
-  if (btn.dataset.act === 'rename') {
-    const newTag = (input.value || '').trim();
-    if (!newTag) { toast('新标签不能为空'); return; }
-    try {
-      const n = await renameTag(oldTag, newTag);
-      await renderTagManager();
-      await refresh();
-      toast(`已重命名/合并 ${n} 条记录到「${newTag}」`);
-    } catch (err) {
-      toast(`重命名失败：${err.message}`, 4200);
-    }
-  } else if (btn.dataset.act === 'delete') {
-    if (!confirm(`从所有本地记录中删除标签「${oldTag}」？`)) return;
-    const n = await deleteTag(oldTag);
-    await renderTagManager();
-    await refresh();
-    toast(`已从 ${n} 条记录删除「${oldTag}」`);
-  }
-});
 
-els.exportBtn.addEventListener('click', openBackupPanel);
-els.backupClose.addEventListener('click', () => { els.backupPanel.hidden = true; });
-els.backupExportBtn.addEventListener('click', doBackupExport);
-['backup-book', 'backup-type', 'backup-from', 'backup-to'].forEach((id) => {
-  document.getElementById(id).addEventListener('change', refreshBackupStats);
-});
-els.backupImages.addEventListener('change', refreshBackupStats);
-els.exportPdfBtn.addEventListener('click', async () => {
-  await renderExportSelects();
-  els.exportPanel.hidden = false;
-});
-els.exportClose.addEventListener('click', () => { els.exportPanel.hidden = true; });
-els.exportPrintBtn.addEventListener('click', doPrintDraft);
-els.exportMdBtn.addEventListener('click', doDownloadMd);
-els.importBtn.addEventListener('click', () => els.importFile.click());
-els.importFile.addEventListener('change', () => {
-  if (els.importFile.files[0]) doImport(els.importFile.files[0]);
-  els.importFile.value = '';
-});
-els.importConfirm.addEventListener('click', confirmImport);
-els.importCancel.addEventListener('click', closeImportDialog);
-els.syncBtn.addEventListener('click', async () => {
-  els.syncBtn.disabled = true;
-  els.syncBtn.textContent = '同步中…';
-  try {
-    await syncFromCli();
-  } catch (err) {
-    toast(`同步失败：${err.message}`, 4200);
-  } finally {
-    els.syncBtn.disabled = false;
-    els.syncBtn.textContent = '⇄ 从电脑导入';
-  }
-});
 
 els.photoBtn.addEventListener('click', () => els.photoInput.click());
 els.photoInput.addEventListener('change', async () => {
@@ -1198,6 +740,8 @@ els.list.addEventListener('click', async (event) => {
   renderHeader();
   document.title = `${currentType.label} · 读书笔记`;
   renderMdToolbar();
+  // 数据管理入口（⚙️ 数据）：导入/备份/导出生成/类型/标签——共享模块（20260911 回归修复）
+  mountDataActions({ onChange: refresh, getCurrentType: () => currentType });
   // F3 入口：?tag= / ?concept=（详情页 chips 跳转）→ 过滤状态 + 可清除 chips
   const urlParams = new URLSearchParams(location.search);
   listFilters.tag = urlParams.get('tag') || '';
@@ -1208,7 +752,8 @@ els.list.addEventListener('click', async (event) => {
   loadConceptCatalog();
   getAllProjects().then((ps) => { els.projectList.innerHTML = ps.map((p2) => `<option value="${esc(p2)}"></option>`).join(''); });
   // 编辑直入：note.html「✏️ 编辑」→ type.html?t=<类型>&edit=<id>（编辑器与创建一致，保存回跳详情页）
-  const editId = new URLSearchParams(location.search).get('edit');
+  const editId = urlParams.get('edit');
+  const isNew = urlParams.get('new');   // 文件夹页「＋ 写一篇」→ 自动打开空白编辑器（20260911 修复）
   if (editId) {
     editingFromDetail = true;
     setTimeout(async () => {
@@ -1216,5 +761,7 @@ els.list.addEventListener('click', async (event) => {
       if (rec) openEditor(rec);
       else toast('没有找到该记录（可能尚未导入）', 4200);
     }, 300);
+  } else if (isNew) {
+    setTimeout(() => openEditor(null), 300);
   }
 })();

@@ -1138,6 +1138,15 @@ a.tag:hover {
 }
 .graph-note-open:hover { background: #f7f0e0; }
 
+/* ── 数据中枢（⚙️ 数据，20260911 回归修复）：入口按钮两列网格 ── */
+.data-hub-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+.search-results-title { font-size: 16px; margin: 6px 0 12px; }
+
 /* ── 笔记目录 / 文件夹页（20260911 ⑤⑥）── */
 .folder-grid {
   display: grid;

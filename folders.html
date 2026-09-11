@@ -22,10 +22,13 @@
     </section>
 
     <div class="toolbar">
+      <input type="search" id="search-input" placeholder="搜索全部笔记（标题/正文/读者注/AI注/项目/标签）…" autocomplete="off">
       <span class="count" id="folder-count"></span>
       <div class="toolbar-actions">
+        <button class="btn primary" id="new-note-btn" type="button">＋ 写一篇</button>
         <button class="btn ghost" id="new-folder-btn" type="button">＋ 新建文件夹</button>
         <button class="btn ghost" id="manage-toggle" type="button">✏️ 管理</button>
+        <button class="btn ghost" id="data-btn" type="button" title="导入 / 备份 / 导出 / 类型 / 标签">⚙️ 数据</button>
       </div>
     </div>
 
@@ -41,6 +44,12 @@
         <button class="btn primary" id="folder-save" type="button">保存</button>
         <button class="btn ghost" id="folder-cancel" type="button">取消</button>
       </div>
+    </div>
+
+    <!-- 搜索结果（跨文件夹） -->
+    <div id="search-results" hidden>
+      <h2 class="search-results-title">搜索结果 <span class="muted" id="search-count"></span></h2>
+      <div id="search-list" class="note-list"></div>
     </div>
 
     <!-- 文件夹目录（卡片网格） -->

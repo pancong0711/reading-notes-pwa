@@ -6,9 +6,10 @@
  *   · 点卡片 → folder.html?p=<路径>
  */
 import {
-  getAllNotes, getFolders, createFolder, renameFolder, deleteFolder,
+  getAllNotes, getFolders, createFolder, renameFolder, deleteFolder, getConceptCatalog,
 } from './data.js';
-import { buildTree, folderStats, typeCounts, normalizeProject, OTHERS } from './folder-util.js';
+import { buildTree, folderStats, typeCounts, normalizeProject, OTHERS, filterNotes } from './folder-util.js';
+import { mountDataActions } from './data-actions.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -43,12 +44,19 @@ function typeLabel(key) {
 }
 
 let manageMode = false;
+let searchQuery = '';
+let allNotes = [];
 let editingPath = null;   // 非 null = 重命名模式
 
 /* ── 渲染 ── */
 
 async function render() {
   const [notes, folders] = await Promise.all([getAllNotes(), getFolders()]);
+  allNotes = notes;
+  // 搜索模式：跨文件夹列出匹配笔记（20260911）
+  if (searchQuery.trim()) { renderSearchResults(notes); return; }
+  $('search-results').hidden = true;
+  $('folder-grid').hidden = false;
   // 全部路径 = 显式文件夹 ∪ 记录 project（含中间层自动补齐）
   const paths = new Set(folders.map((f) => normalizeProject(f.path)));
   notes.forEach((n) => paths.add(normalizeProject(n.project)));
@@ -118,6 +126,31 @@ async function render() {
   });
 }
 
+/* ── 搜索（跨文件夹）── */
+
+function renderSearchResults(notes) {
+  const list = filterNotes(notes, { q: searchQuery })
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  $('folder-grid').hidden = true;
+  $('search-results').hidden = false;
+  $('search-count').textContent = `（${list.length} 篇）`;
+  const wrap = $('search-list');
+  wrap.innerHTML = '';
+  for (const n of list) {
+    const card = document.createElement('article');
+    card.className = 'note-card';
+    card.innerHTML = `
+      <div class="note-thumb note-thumb-empty">${esc((window.NoteTypes && NoteTypes.getType(n.type || 'note') || {}).icon || '📝')}</div>
+      <div class="note-body">
+        <div class="note-meta">${esc(n.date || '无日期')} · 📁 ${esc(normalizeProject(n.project))}</div>
+        <h3 class="note-title">${esc(n.title || '未命名')}</h3>
+        <p class="note-note">${esc(String(n.content || n.readerNote || n.aiNote || '').replace(/\s+/g, ' ').slice(0, 90))}</p>
+      </div>`;
+    card.addEventListener('click', () => { location.href = `note.html?id=${encodeURIComponent(n.id)}`; });
+    wrap.appendChild(card);
+  }
+}
+
 /* ── 面板（新建 / 重命名）── */
 
 function openNewFolder() {
@@ -151,6 +184,13 @@ async function saveFolder() {
 /* ── 事件 ── */
 
 $('new-folder-btn').addEventListener('click', openNewFolder);
+$('search-input').addEventListener('input', (e) => { searchQuery = e.target.value; render(); });
+$('new-note-btn').addEventListener('click', () => {
+  // 目录页直接新建（默认阅读笔记，project 默认 other，可在编辑器内改）
+  location.href = 'type.html?t=note&new=1&ret=';
+});
+// 数据管理入口（⚙️ 数据）：导入/备份/导出生成/类型/标签——共享模块（20260911 回归修复）
+mountDataActions({ onChange: render, getCurrentType: () => null });
 $('manage-toggle').addEventListener('click', () => { manageMode = !manageMode; render(); });
 $('folder-save').addEventListener('click', saveFolder);
 $('folder-cancel').addEventListener('click', () => { $('folder-panel').hidden = true; editingPath = null; });

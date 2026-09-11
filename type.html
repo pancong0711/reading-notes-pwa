@@ -46,13 +46,7 @@
       <span class="count" id="record-count"></span>
       <div class="toolbar-actions">
         <button class="btn primary" id="new-btn" type="button">＋ 写一篇</button>
-        <button class="btn ghost" id="sync-btn" type="button" title="拉取本网页所在服务器的 export.json（本机/局域网打开时=电脑最新数据）">⇄ 从服务器导入</button>
-        <button class="btn ghost" id="manage-btn" type="button">管理类型</button>
-        <button class="btn ghost" id="tag-manage-btn" type="button">整理标签</button>
-        <button class="btn ghost" id="export-btn" type="button">⬇ 备份 / 迁移包</button>
-        <button class="btn ghost" id="export-pdf-btn" type="button">导出/生成</button>
-        <button class="btn ghost" id="import-btn" type="button" title="从本机选择迁移包/笔记包 JSON（跨终端互传）">📥 导入文件</button>
-        <input type="file" id="import-file" accept=".json,application/json" hidden>
+        <button class="btn ghost" id="data-btn" type="button" title="导入 / 备份 / 导出 / 类型 / 标签">⚙️ 数据</button>
       </div>
     </div>
 
@@ -138,109 +132,6 @@
     </div>
 
     <!-- 标签整理面板 -->
-    <div id="tag-manage" class="type-manage" hidden>
-      <h2>整理标签</h2>
-      <p class="muted">重命名会把旧标签合并到新标签；删除会从所有本地记录移除。</p>
-      <div id="tag-list"></div>
-      <button class="btn ghost" id="tag-manage-close" type="button">关闭</button>
-    </div>
-
-    <!-- 类型管理面板 -->
-    <div id="type-manage" class="type-manage" hidden>
-      <h2>管理记录类型</h2>
-      <div id="type-list"></div>
-      <form id="type-add-form" class="type-add-form">
-        <h3>新增自定义类型</h3>
-        <label class="field">key（标识，小写字母/数字/连字符）
-          <input id="t-key" type="text" placeholder="如：idea">
-        </label>
-        <label class="field">显示名
-          <input id="t-label" type="text" placeholder="如：灵感">
-        </label>
-        <label class="field">图标（emoji）
-          <input id="t-icon" type="text" placeholder="如：💡">
-        </label>
-        <div class="field">
-          <span>附加字段</span>
-          <div id="t-fields"></div>
-        </div>
-        <button class="btn primary" type="submit">添加</button>
-        <button class="btn ghost" id="type-manage-close" type="button">关闭</button>
-      </form>
-    </div>
-
-    <!-- 备份 / 迁移包面板（范围 + 含图片；纯 PWA 互传 / 回传电脑 / 备份） -->
-    <div id="backup-panel" class="type-manage" hidden>
-      <h2>备份 / 迁移包</h2>
-      <p class="muted">导出本机数据为笔记包 JSON，三种用法：<b>① 纯 PWA 多端互传</b>（另一台设备「导入 JSON」即可，勾选含图片则照片随包迁移）；<b>② 回传电脑</b>（CLI <code>import-json</code> 写入 md 体系）；<b>③ 本地备份</b>。</p>
-      <div class="export-scope">
-        <label class="export-opt"><input type="radio" name="backup-scope" value="all" checked><span>全部记录</span></label>
-        <label class="export-opt"><input type="radio" name="backup-scope" value="book"><span>某本书</span>
-          <select id="backup-book"></select></label>
-        <label class="export-opt"><input type="radio" name="backup-scope" value="type"><span>某类型</span>
-          <select id="backup-type"></select></label>
-        <label class="export-opt"><input type="radio" name="backup-scope" value="date"><span>日期区间</span>
-          <input type="date" id="backup-from"><span class="muted">～</span><input type="date" id="backup-to"></label>
-        <label class="export-opt"><input type="checkbox" id="backup-images" checked><span>☑ 含图片（默认开；图片随包迁移，换机/离线均可显示）</span></label>
-      </div>
-      <p class="muted" id="backup-stats"></p>
-      <div class="editor-actions">
-        <button class="btn primary" id="backup-export-btn" type="button">⬇ 导出笔记包</button>
-        <button class="btn ghost" id="backup-close" type="button">关闭</button>
-      </div>
-    </div>
-
-    <!-- 导出/生成面板（打印草稿 / 下载书稿 md） -->
-    <div id="export-panel" class="type-manage" hidden>
-      <h2>导出 / 生成</h2>
-      <p class="muted">选择范围后生成：打印草稿在浏览器打印窗口另存为 PDF；书稿为 markdown 文本下载。</p>
-
-      <div class="export-scope">
-        <label class="export-opt">
-          <input type="radio" name="export-scope" value="all" checked>
-          <span>全部记录</span>
-        </label>
-        <label class="export-opt">
-          <input type="radio" name="export-scope" value="book">
-          <span>某本书</span>
-          <select id="export-book"></select>
-        </label>
-        <label class="export-opt">
-          <input type="radio" name="export-scope" value="type">
-          <span>某类型</span>
-          <select id="export-type"></select>
-        </label>
-        <label class="export-opt">
-          <input type="radio" name="export-scope" value="date">
-          <span>日期区间</span>
-          <input type="date" id="export-from">
-          <span class="muted">～</span>
-          <input type="date" id="export-to">
-        </label>
-      </div>
-
-      <div class="export-actions">
-        <button class="btn primary" id="export-print-btn" type="button">🖨 打印草稿</button>
-        <button class="btn ghost" id="export-md-btn" type="button">⬇ 下载书稿（md）</button>
-        <button class="btn ghost" id="export-close" type="button">关闭</button>
-      </div>
-    </div>
-
-    <!-- 导入对比面板 -->
-    <div id="import-panel" class="type-manage" hidden>
-      <h2>导入前对比</h2>
-      <p class="muted" id="import-diff-text">正在计算差异…</p>
-      <div id="import-strategy" class="import-strategy">
-        <label class="strategy"><input type="radio" name="import-strategy" value="merge" checked> 智能合并<span class="muted">（新增 + 包内较新覆盖，本端较新的保留）</span></label>
-        <label class="strategy"><input type="radio" name="import-strategy" value="new"> 仅新增<span class="muted">（不覆盖任何现有记录）</span></label>
-        <label class="strategy"><input type="radio" name="import-strategy" value="replace"> 完整替换<span class="muted">（以导入包为准清空重建）</span></label>
-      </div>
-      <p class="muted">导入前会自动下载一份当前数据的备份文件。</p>
-      <div class="strategy-actions">
-        <button class="btn primary" id="import-confirm" type="button">确认导入</button>
-        <button class="btn ghost" id="import-cancel" type="button">取消</button>
-      </div>
-    </div>
   </main>
 
   <footer class="site-footer">
