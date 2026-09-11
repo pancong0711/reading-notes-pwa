@@ -9,7 +9,7 @@
  * 宿主页面提供 <button id="data-btn">（自动绑定打开数据面板）与可选 <p id="import-status">。
  */
 import {
-  getAllNotes, getAllBooks, getConceptCatalog, exportNotePackage,
+  getAllNotes, getAllBooks, getConceptCatalog, exportNotePackage, summarizePackage,
   diffNotePackage, mergeNotePackage, getAllTags, renameTag, deleteTag,
 } from './data.js';
 import {

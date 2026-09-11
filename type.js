@@ -22,6 +22,7 @@ import {
   renameTag,
   deleteTag,
   getAllProjects,
+  getAllBooks,
 } from './data.js';
 import { renderNoteDetailInto } from './note-detail.js';
 import { filterNotesByScope, buildPrintHtml, buildMarkdownDraft, scopeLabel } from './print-export.js';
