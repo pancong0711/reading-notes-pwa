@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>笔记 · 读书笔记</title>
+  <link rel="stylesheet" href="styles.css?v=20260911">
+  <script src="reading-font.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html">读书笔记</a>
+      <nav class="nav" id="main-nav"></nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="welcome">
+      <h1>📒 笔记</h1>
+      <p>按文件夹（项目）管理全部记录——阅读笔记 / 日记 / 日志 / 备忘。点文件夹进入；未归类的记录在 <code>other</code>。</p>
+    </section>
+
+    <div class="toolbar">
+      <span class="count" id="folder-count"></span>
+      <div class="toolbar-actions">
+        <button class="btn ghost" id="new-folder-btn" type="button">＋ 新建文件夹</button>
+        <button class="btn ghost" id="manage-toggle" type="button">✏️ 管理</button>
+      </div>
+    </div>
+
+    <!-- 新建/重命名文件夹 面板 -->
+    <div id="folder-panel" class="type-manage" hidden>
+      <h2 id="folder-panel-title">新建文件夹</h2>
+      <p class="muted">支持层级路径，用 <code>/</code> 分隔（如 <code>项目A/文献</code>）；全角斜杠会自动转换。</p>
+      <label class="field">路径
+        <input id="folder-path" type="text" placeholder="如：项目A/文献">
+      </label>
+      <p class="muted" id="folder-panel-msg"></p>
+      <div class="editor-actions">
+        <button class="btn primary" id="folder-save" type="button">保存</button>
+        <button class="btn ghost" id="folder-cancel" type="button">取消</button>
+      </div>
+    </div>
+
+    <!-- 文件夹目录（卡片网格） -->
+    <div id="folder-grid" class="folder-grid"></div>
+
+    <div class="empty-state" id="empty-state" hidden>
+      <h2>还没有文件夹</h2>
+      <p>点「＋ 新建文件夹」创建，或在写笔记时填写项目名。</p>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">读书笔记 · 本地浏览</div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="file-warning.js"></script>
+  <script src="sw-register.js"></script>
+  <script src="panel-modal.js"></script>
+  <script src="types.js"></script>
+  <script>
+    document.getElementById('main-nav').innerHTML = NoteTypes.renderNav('folders');
+  </script>
+  <script type="module" src="folders.js?v=20260911"></script>
+</body>
+</html>

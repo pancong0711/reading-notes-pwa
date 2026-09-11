@@ -9,7 +9,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v32';
+var CACHE_NAME = 'reading-notes-v33';
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [
@@ -20,6 +20,10 @@ var CORE_ASSETS = [
   './styles.css',
   './data.js',
   './folder-util.js',   // v32：文件夹路径工具（规范化/前缀树）
+  './folders.html',   // v33：笔记目录页（文件夹卡片网格）
+  './folders.js',
+  './folder.html',   // v33：文件夹页（子文件夹/直属笔记/多选移动）
+  './folder.js',
   './types.js',
   './type.html',
   './type.js',

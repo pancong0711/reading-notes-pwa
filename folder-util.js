@@ -130,4 +130,55 @@ export function subtreeNotes(notes, folderPath) {
   return (notes || []).filter((n) => isSameOrSub(n.project, base));
 }
 
-export default { OTHERS, normalizeProject, splitPath, displayName, parentPath, isRootLevel, isSameOrSub, rebasePath, buildTree, directChildren, directNotes, subtreeNotes };
+export default { OTHERS, normalizeProject, splitPath, displayName, parentPath, isRootLevel, isSameOrSub, rebasePath, buildTree, directChildren, directNotes, subtreeNotes, filterNotes, folderStats, typeCounts };
+/**
+ * 记录过滤（文件夹页/目录页共用，纯函数便于测试）
+ * @param {Array} notes
+ * @param {object} opt { q, types, dateFrom, dateTo, folder, subtree }
+ * @returns {Array}
+ */
+export function filterNotes(notes, opt = {}) {
+  const { q = '', types = [], dateFrom = '', dateTo = '', folder = null, subtree = false } = opt;
+  let list = Array.isArray(notes) ? notes.slice() : [];
+  if (folder != null && folder !== '') {
+    list = subtree ? subtreeNotes(list, folder) : directNotes(list, folder);
+  }
+  if (Array.isArray(types) && types.length) {
+    const want = new Set(types);
+    list = list.filter((n) => want.has(String(n.type || 'note')));
+  }
+  const kw = String(q || '').trim().toLowerCase();
+  if (kw) {
+    list = list.filter((n) => {
+      const fields = [n.title, n.content, n.readerNote, n.aiNote, n.project,
+        ...(Array.isArray(n.tags) ? n.tags : []),
+        ...(Array.isArray(n.concepts) ? n.concepts.map((c) => (typeof c === 'string' ? c : c && c.id)) : [])];
+      return fields.some((f) => String(f == null ? '' : f).toLowerCase().includes(kw));
+    });
+  }
+  if (dateFrom) list = list.filter((n) => String(n.date || '') >= dateFrom);
+  if (dateTo) list = list.filter((n) => String(n.date || '') <= dateTo);
+  return list;
+}
+
+/** 文件夹卡片统计：直属/子树条数 + 最近更新（ms） */
+export function folderStats(notes, path) {
+  const direct = directNotes(notes, path);
+  const sub = subtreeNotes(notes, path);
+  let latest = 0;
+  for (const n of sub) {
+    const ts = Number(n.updatedAt) || 0;
+    if (ts > latest) latest = ts;
+  }
+  return { direct: direct.length, total: sub.length, latest };
+}
+
+/** 类型分布（用于卡片徽标）：{type: count} */
+export function typeCounts(notes) {
+  const m = {};
+  for (const n of notes || []) {
+    const k = String(n.type || 'note');
+    m[k] = (m[k] || 0) + 1;
+  }
+  return m;
+}

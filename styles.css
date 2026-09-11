@@ -1138,6 +1138,42 @@ a.tag:hover {
 }
 .graph-note-open:hover { background: #f7f0e0; }
 
+/* ── 笔记目录 / 文件夹页（20260911 ⑤⑥）── */
+.folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.folder-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.folder-card:hover { border-color: var(--accent); box-shadow: var(--shadow); }
+.folder-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.folder-card-head h3 { margin: 0; font-size: 16px; color: var(--ink); }
+.folder-icon { font-size: 18px; }
+.folder-card-actions { margin-left: auto; display: flex; gap: 6px; }
+.folder-card-meta { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.folder-card-sub { margin: 4px 0 0; font-size: 12px; color: var(--ink-soft); }
+.folder-page-top { margin: 6px 0 2px; }
+.breadcrumb { font-size: 13px; color: var(--muted); margin: 0; }
+.breadcrumb a { color: var(--accent-strong); text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; }
+.breadcrumb .sep { margin: 0 4px; color: var(--line); }
+.bulk-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+.note-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.note-card .pick { position: absolute; top: 10px; right: 10px; width: 18px; height: 18px; }
+.note-card { position: relative; }
+.folder-page-top #back-btn { margin-bottom: 4px; }
+
 /* ── 筛选栏（项目/书名/日期区间；紧凑单行，移动端换行）── */
 .filter-bar {
   display: flex;

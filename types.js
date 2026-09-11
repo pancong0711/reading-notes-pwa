@@ -132,6 +132,7 @@
       '<a href="book.html"' + (activeKey === 'book' ? ' class="active"' : '') + '>书架</a>',
       '<a href="graph.html"' + (activeKey === 'graph' ? ' class="active"' : '') + '>知识图谱</a>',
       '<a href="concepts.html"' + (activeKey === 'concepts' ? ' class="active"' : '') + '>概念管理</a>',
+      '<a href="folders.html"' + (activeKey === 'folders' ? ' class="active"' : '') + '>📒 笔记</a>',
     ];
     getTypes().forEach(function (t) {
       parts.push(

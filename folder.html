@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文件夹 · 读书笔记</title>
+  <link rel="stylesheet" href="styles.css?v=20260911">
+  <script src="reading-font.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html">读书笔记</a>
+      <nav class="nav" id="main-nav"></nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="folder-page-top">
+      <button class="btn ghost small" id="back-btn" type="button">← 返回笔记目录</button>
+    </div>
+    <section class="welcome">
+      <h1 id="folder-title">文件夹</h1>
+      <p class="breadcrumb" id="breadcrumb"></p>
+    </section>
+
+    <!-- 筛选栏（类型 chips + 搜索 + 日期） -->
+    <div class="filter-bar" id="filter-bar">
+      <div class="filter-type-chips" id="type-chips"></div>
+      <input type="search" id="search-input" placeholder="搜索标题/内容/读者注/AI注…">
+      <input type="date" id="filter-from" title="起始日期">
+      <span class="muted">～</span>
+      <input type="date" id="filter-to" title="结束日期">
+      <button type="button" class="btn ghost small" data-quick="month">本月</button>
+      <button type="button" class="btn ghost small" data-quick="year">今年</button>
+      <button type="button" class="btn ghost small" data-quick="clear">清空</button>
+    </div>
+
+    <!-- 多选操作栏 -->
+    <div class="bulk-bar" id="bulk-bar">
+      <button class="btn ghost small" id="select-toggle" type="button">☑ 多选</button>
+      <span class="muted" id="bulk-count"></span>
+      <button class="btn ghost small" id="select-all" type="button" hidden>全选</button>
+      <button class="btn primary small" id="move-btn" type="button" hidden>移动到文件夹</button>
+    </div>
+
+    <!-- 子文件夹 -->
+    <div id="sub-folders" class="folder-grid"></div>
+
+    <!-- 直属笔记 -->
+    <div id="note-list" class="note-list"></div>
+
+    <div class="empty-state" id="empty-state" hidden>
+      <h2>这个文件夹还没有笔记</h2>
+      <p>可在记录页写新笔记时填写该文件夹名，或用「移动到文件夹」把已有笔记归入。</p>
+    </div>
+
+    <!-- 移动面板 -->
+    <div id="move-panel" class="type-manage" hidden>
+      <h2>移动到文件夹</h2>
+      <p class="muted" id="move-info"></p>
+      <label class="field">选择已有文件夹
+        <select id="move-select"></select>
+      </label>
+      <label class="field">或新建文件夹（留空则用上方选择）
+        <input id="move-new" type="text" placeholder="如：项目A/文献">
+      </label>
+      <div class="editor-actions">
+        <button class="btn primary" id="move-confirm" type="button">确定移动</button>
+        <button class="btn ghost" id="move-cancel" type="button">取消</button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">读书笔记 · 本地浏览</div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="file-warning.js"></script>
+  <script src="sw-register.js"></script>
+  <script src="panel-modal.js"></script>
+  <script src="types.js"></script>
+  <script>
+    document.getElementById('main-nav').innerHTML = NoteTypes.renderNav('folders');
+  </script>
+  <script type="module" src="folder.js?v=20260911"></script>
+</body>
+</html>
