@@ -45,6 +45,8 @@ const els = {
   emptyHint: $('empty-hint'),
   editor: $('editor'),
   editorTitle: $('editor-title'),
+  fType: $('f-type'),
+  fType: $('f-type'),
   newBtn: $('new-btn'),
   emptyNewBtn: $('empty-new-btn'),
   manageBtn: $('manage-btn'),
@@ -432,8 +434,11 @@ async function fillTagHistory() {
 function openEditor(rec) {
   fillTagHistory();   // 既有标签历史提示（需求 20260905-批次二 F3）
   editingId = rec ? rec.id : null;
-  const effType = (currentType.key === 'all' && rec) ? NoteTypes.getType(rec.type || 'note') : currentType;
-  const eff = effType || currentType;
+  const effType = (currentType.pseudo && !rec) ? NoteTypes.getType('note')
+    : (currentType.pseudo && rec) ? NoteTypes.getType(rec.type || 'note')
+    : currentType;
+  const eff = effType || NoteTypes.getType('note');
+  fillTypeOptions(eff.key);   // 类型选择器（20260911 ⑦：新建必选/编辑可改）
   photoData = rec?.imageData || '';
   const verb = rec ? '编辑' : '写';
   els.editorTitle.textContent = `${verb}${eff.label}`;
@@ -441,7 +446,7 @@ function openEditor(rec) {
   els.fTitle.value = rec?.title || '';
   els.fTags.value = (rec?.tags || []).join(', ');
   els.fContent.value = rec?.content || '';
-  els.fProject.value = rec?.project || '';
+  els.fProject.value = rec?.project || new URLSearchParams(location.search).get('project') || '';
   els.mdPreview.hidden = true;
   els.fReader.value = rec?.readerNote || '';
   els.fAi.value = rec?.aiNote || '';
@@ -471,13 +476,13 @@ function closeEditor() {
 
 async function saveRecord() {
   const existing = editingId ? notesCache.find((n) => n.id === editingId) : null;
-  const effType = (currentType.key === 'all') ? (NoteTypes.getType(existing?.type || 'note') || currentType) : currentType;
+  const effType = selectedTypeDef();   // 以编辑器所选类型为准（20260911 ⑦）
   const title = els.fTitle.value.trim();
   const date = els.fDate.value || todayStr();
   const rec = {
     ...existing,                       // 保留未编辑的其它字段
     id: editingId || undefined,
-    type: (currentType.key === 'all' ? (existing?.type || 'note') : currentType.key),
+    type: effType.key || 'note',
     title: title || `${currentType.label} · ${date}`,
     date,
     tags: parseTagsInput(els.fTags.value),
@@ -492,9 +497,11 @@ async function saveRecord() {
   await addNote(rec);
   const savedId = editingId;
   const fromDetail = editingFromDetail;
+  const ret = new URLSearchParams(location.search).get('ret');   // 文件夹内新建后回跳
   closeEditor();
   await refresh();
   toast(fromDetail ? '已保存，返回详情' : (savedId ? '已更新' : '已保存'));
+  if (!fromDetail && ret) location.href = `folder.html?p=${encodeURIComponent(ret)}`;
 }
 
 /* ── AI 咨询（同 notes.js，OpenAI 兼容端点） ── */
@@ -867,6 +874,21 @@ async function doDownloadMd() {
   toast('已下载书稿 markdown');
 }
 
+
+/** 类型下拉（新建必选 / 编辑可改；20260911 ⑦） */
+function fillTypeOptions(selectedKey) {
+  if (!els.fType) return;
+  els.fType.innerHTML = NoteTypes.getTypes(false)
+    .map((t) => `<option value="${esc(t.key)}"${t.key === selectedKey ? ' selected' : ''}>${esc(t.icon + ' ' + t.label)}</option>`)
+    .join('');
+}
+
+/** 当前编辑器选中的类型定义 */
+function selectedTypeDef() {
+  const k = (els.fType && els.fType.value) || currentType.key;
+  return NoteTypes.getType(k) || currentType;
+}
+
 /* ── 富文本工具栏 / 预览（A1：md-toolbar 纯函数驱动）────────────── */
 
 function renderMdToolbar() {
@@ -891,6 +913,14 @@ async function toggleMdPreview() {
     els.mdPreview.innerHTML = renderPreview(els.fContent.value || '');
     try { await typesetInto(els.mdPreview); } catch (e) { /* 公式排版失败不阻断预览 */ }
   }
+}
+
+if (els.fType) {
+  els.fType.addEventListener('change', () => {
+    const def = selectedTypeDef();
+    buildTypeFields(editingId ? notesCache.find((n) => n.id === editingId) : null, def);
+    els.editorTitle.textContent = `${editingId ? '编辑' : '写'}${def.label}`;
+  });
 }
 
 els.mdToolbar.addEventListener('click', (e) => {
@@ -1156,7 +1186,14 @@ els.list.addEventListener('click', async (event) => {
 
 /* ── 启动 ── */
 (function init() {
-  const key = new URLSearchParams(location.search).get('t') || 'note';
+  const params = new URLSearchParams(location.search);
+  const key = params.get('t') || 'note';
+  // 旧列表 URL 重定向（20260911 ⑦）：type.html?t=note|diary|log|memo → 📒 笔记目录
+  // 例外：?edit= 编辑直入、type=all（标签/概念筛选落地页）保持原页
+  if (key !== 'all' && !params.get('edit') && !params.get('new')) {
+    location.replace('folders.html');
+    return;
+  }
   currentType = NoteTypes.getType(key) || NoteTypes.getType('note');
   renderHeader();
   document.title = `${currentType.label} · 读书笔记`;

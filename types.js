@@ -134,13 +134,8 @@
       '<a href="concepts.html"' + (activeKey === 'concepts' ? ' class="active"' : '') + '>概念管理</a>',
       '<a href="folders.html"' + (activeKey === 'folders' ? ' class="active"' : '') + '>📒 笔记</a>',
     ];
-    getTypes().forEach(function (t) {
-      parts.push(
-        '<a href="type.html?t=' + encodeURIComponent(t.key) + '"' +
-          (t.key === activeKey ? ' class="active"' : '') + '>' +
-          t.icon + ' ' + t.label + '</a>'
-      );
-    });
+    // 20260911 ⑦：类型不再作为导航入口（降级为笔记模块内的类型筛选）；
+    // 类型页面仅作为编辑器宿主与「全部记录」筛选落地页（type.html?t=all&tag=/&concept=）。
     return parts.join('');
   }
 

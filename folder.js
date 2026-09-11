@@ -224,6 +224,10 @@ $('filter-bar').addEventListener('click', (e) => {
 });
 
 $('back-btn').addEventListener('click', () => { location.href = 'folders.html'; });
+$('new-note-btn').addEventListener('click', () => {
+  // 当前文件夹内新建：预填 project，保存后回跳本文件夹（20260911 ⑦）
+  location.href = `type.html?t=note&new=1&project=${encodeURIComponent(folderPath)}&ret=${encodeURIComponent(folderPath)}`;
+});
 $('select-toggle').addEventListener('click', toggleSelect);
 $('select-all').addEventListener('click', selectAllVisible);
 $('move-btn').addEventListener('click', openMovePanel);
