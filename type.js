@@ -98,6 +98,7 @@ const els = {
   projectList: $('project-list'),
   tagHistory: $('tag-history'),
   filterBar: $('filter-bar'),
+  importStatus: $('import-status'),
   filterProject: $('filter-project'),
   filterBook: $('filter-book'),
   filterFrom: $('filter-from'),
@@ -610,7 +611,10 @@ async function downloadBackup(prefix = '读书笔记-导入前备份') {
  * @param {object} pkg 导入包
  * @param {string} source 来源描述（从电脑导入 / 导入文件）
  */
+let importSource = '';
+
 async function openImportDialog(pkg, source) {
+  importSource = source;
   const diff = await diffNotePackage(pkg);
   pendingImport = { pkg, diff };
   const list = Array.isArray(pkg.notes) ? pkg.notes : [];
@@ -675,7 +679,12 @@ async function confirmImport() {
         ? `并入 ${catalogAdded} 概念 / ${catalogDomainsAdded} 域（已存本机）`
         : '本端已齐，无新增'}`
       : '';
-    toast(`已${strategy === 'replace' ? '替换' : strategy === 'new' ? '仅新增' : '合并'}导入 ${applied} 条${kept}${cat}`);
+    const label = strategy === 'replace' ? '替换' : strategy === 'new' ? '仅新增' : '合并';
+    toast(`已${label}导入 ${applied} 条${kept}${cat}`);
+    if (els.importStatus) {
+      els.importStatus.textContent = `✅ 已${label}导入 ${applied} 条${kept}${cat} ｜ 来源：${importSource}`;
+      els.importStatus.hidden = false;
+    }
   } catch (e) {
     toast(`导入失败：${e.message}`, 4200);
   } finally {

@@ -782,8 +782,9 @@ main {
   color: #1a1a1a;
   margin: 2px 0 6px;
 }
+/* Aa 字号作用域（20260911）：列表卡片正文随档位（简单 calc，不嵌套 clamp） */
 .note-note {
-  font-size: 12px;
+  font-size: calc(12px * var(--fs-mul, 1));
   color: #666;
   margin: 3px 0;
   line-height: 1.6;
@@ -1015,6 +1016,10 @@ a.tag:hover {
   line-height: 1.9;
 }
 .note-page-body .note-md { font-size: 1em; }   /* 详情正文继承阅读字号（覆盖 .note-md 13px 紧凑档） */
+/* 字号修复（20260911）：note-detail 每个区块都包在 .note-sec 里，而全局 .note-sec{13px}
+ * 会截断卡片层 var(--fs-reading) 的继承（内层 em 全部以 13px 为基准）→ Aa 四档对白底正文无效。
+ * 解钉：卡片内的 .note-sec 与正文同为 1em（继承卡片字号）。 */
+.note-page-body .note-sec { font-size: 1em; }
 /* R12（关键修复）：R7 拆层后 #note-body 仍带 .note-md（13px）直接命中内层——
  * 卡片的 var(--fs-reading) 被压回恒定 13px，正文档位永远无效。
  * id 提权回 1em：继承 .note-page-body 的 var(--fs-reading)，Aa 四档方能作用于正文。 */
@@ -1199,13 +1204,42 @@ a.tag:hover {
 
 /* ── 类型管理面板（type.html） ── */
 
+/* 模态浮层（20260911 需求 ④）：原为文档流内块 → 面板渲染在列表下方，需滚到页底才可见。
+ * 改为 fixed 居中 + 全屏遮罩（::before）+ 内部滚动；全站面板（导入/导出生成/备份/类型/标签）一次受益。 */
 .type-manage {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(600px, calc(100vw - 28px));
+  max-height: min(86vh, 760px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  z-index: 85;                      /* 高于图谱面板(50)/FAB(60)/字号弹层(70)，低于 toast(99) */
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 18px 20px;
-  margin-top: 20px;
-  box-shadow: var(--shadow);
+  margin: 0;
+  box-shadow: 0 18px 48px rgba(40, 32, 20, 0.22);
+}
+.type-manage::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(30, 26, 20, 0.38);   /* 遮罩（点击遮罩关闭逻辑见 panel-modal.js） */
+  z-index: -1;
+}
+
+/* 导入结果内联行（20260911 需求 ④）：显示在工具栏按钮下方，免去滚到页底找提示 */
+.import-status {
+  margin: 0 0 10px;
+  padding: 7px 12px;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
 }
 .type-manage h2 {
   margin: 0 0 12px;

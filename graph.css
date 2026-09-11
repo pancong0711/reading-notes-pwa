@@ -396,9 +396,10 @@
   border-bottom: 1px solid var(--line);
 }
 
+/* Aa 字号作用域（20260911）：图谱面板正文随档位 */
 .graph-summary {
   margin: 0;
-  font-size: 15px;
+  font-size: calc(15px * var(--fs-mul, 1));
   line-height: 1.8;
   white-space: pre-wrap;
 }
@@ -409,7 +410,7 @@
   border-left: 3px solid var(--accent);
   background: var(--accent-soft);
   color: var(--ink-soft);
-  font-size: 14px;
+  font-size: calc(14px * var(--fs-mul, 1));
   line-height: 1.75;
 }
 
@@ -590,3 +591,7 @@
   line-height: 1.6;
 }
 .graph-uncatalogued a { color: #8a6d3b; font-weight: 700; }
+
+/* Aa 字号作用域（20260911）：面板内 note-detail 继承面板已缩放字号（单一缩放源，避免二次计算） */
+.graph-panel-body .note-sec,
+.graph-panel-body .note-md { font-size: 1em; }
