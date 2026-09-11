@@ -9,7 +9,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v31';
+var CACHE_NAME = 'reading-notes-v32';
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [
@@ -19,6 +19,7 @@ var CORE_ASSETS = [
   './book.js',
   './styles.css',
   './data.js',
+  './folder-util.js',   // v32：文件夹路径工具（规范化/前缀树）
   './types.js',
   './type.html',
   './type.js',
@@ -64,13 +65,14 @@ function isCacheable(request) {
  * DB 与页面同库同名（reading-notes，v6 起）；SW 打开时缺库则补建（与 data.js/diary.js 同 schema）。
  */
 var IMAGE_DB = 'reading-notes';
-var IMAGE_DB_VERSION = 6;
+/* 不带版本号打开：避免与页面侧 data.js/diary.js 的 DB_VERSION 漂移（低于现存版本会抛 VersionError）。
+ * 升级/建仓由页面侧负责；SW 仅在缺 store 时补建（见 openImageDb）。 */
 var IMAGE_STORE = 'image_store';
 var IMAGE_RE = /\.(jpg|jpeg|png|gif|webp)$/i;
 
 function openImageDb() {
   return new Promise(function (resolve, reject) {
-    var req = indexedDB.open(IMAGE_DB, IMAGE_DB_VERSION);
+    var req = indexedDB.open(IMAGE_DB);
     req.onupgradeneeded = function () {
       var db = req.result;
       // 仅补建图片仓（其余 store 由页面侧 data.js/diary.js 升级负责，避免 schema 冲突）

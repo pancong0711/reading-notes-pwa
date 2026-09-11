@@ -7,7 +7,7 @@
   'use strict';
 
   var DB_NAME = 'reading-notes';   // 数据库名，与数据层约定一致
-  var DB_VERSION = 6;              // 与 data.js 保持一致（schema 统一：v4 concept_catalog、v5 graph_local、v6 image_store）
+  var DB_VERSION = 7;              // 与 data.js 保持一致（v4 concept_catalog、v5 graph_local、v6 image_store、v7 folder_store）
   var STORE = 'notes';             // 对象仓库名
   var TYPE_DIARY = 'diary';        // 日记类型标记
 
@@ -50,6 +50,10 @@
         // image_store 仓库（v6 图片自包含仓）：与 data.js 同 schema（keyPath: path）
         if (!db.objectStoreNames.contains('image_store')) {
           db.createObjectStore('image_store', { keyPath: 'path' });
+        }
+        // folder_store 仓库（v7 文件夹登记）：与 data.js 同 schema（keyPath: path）
+        if (!db.objectStoreNames.contains('folder_store')) {
+          db.createObjectStore('folder_store', { keyPath: 'path' });
         }
       };
       req.onsuccess = function () { resolve(req.result); };

@@ -38,13 +38,16 @@
  * 便于页面与浏览器控制台直接调用。
  */
 
+import { normalizeProject, OTHERS as OTHERS_FOLDER, rebasePath } from './folder-util.js';
+
 const DB_NAME = 'reading-notes';
-const DB_VERSION = 6;   // v2：type 索引；v3：books store；v4：concept_catalog store；v5：graph_local store；v6：image_store（图片自包含仓，path→Blob，diary.js 同步升级）
+const DB_VERSION = 7;   // v2：type 索引；v3：books store；v4：concept_catalog；v5：graph_local；v6：image_store；v7：folder_store（文件夹/项目，path→记录；diary.js 同步升级）
 const STORE = 'notes';
 const BOOKS_STORE = 'books';
 const CONCEPTS_STORE = 'concept_catalog';   // 概念目录工作副本，keyPath: id
 const GRAPH_LOCAL_STORE = 'graph_local';    // 本机重算 union 图谱存档，keyPath: id
 const IMAGE_STORE = 'image_store';          // 图片自包含仓（迁移包导入/ SW 网络回填），keyPath: path
+const FOLDER_STORE = 'folder_store';        // 文件夹（= project 路径）显式登记，keyPath: path
 
 let _dbPromise = null;
 let _noteSeq = 0;   // 本地新记录 id 递增序号，避免同一毫秒内并发/连续新增时 id 冲突
@@ -91,6 +94,10 @@ function openDB() {
       if (!db.objectStoreNames.contains(IMAGE_STORE)) {
         // v6 新增：图片自包含仓（迁移包导入 / SW 网络回填，diary.js 同步升级补建）
         db.createObjectStore(IMAGE_STORE, { keyPath: 'path' });
+      }
+      if (!db.objectStoreNames.contains(FOLDER_STORE)) {
+        // v7 新增：文件夹登记表（支持预先创建空文件夹；diary.js/sw.js 同步补建）
+        db.createObjectStore(FOLDER_STORE, { keyPath: 'path' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -196,7 +203,7 @@ function normalizeNote(raw, index) {
     characters: raw.characters && typeof raw.characters === 'object' ? raw.characters : {},
     extension: raw.extension || '',
     concepts: normalizeConcepts(raw.concepts),
-    project: typeof raw.project === 'string' ? raw.project.trim() : '',   // 项目维度（可选，因项目而读）
+    project: normalizeProject(raw.project),   // 文件夹/项目路径（规范化；空 → other，不留空）
     meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {},   // 类型特有字段（memo: done/due 等）
     createdAt: raw.createdAt || Date.now(),
     updatedAt: raw.updatedAt || Date.now(),
@@ -646,15 +653,159 @@ export async function getNoteById(id) {
   });
 }
 
-/** 全库去重项目名（按 updatedAt 降序，datalist/筛选下拉用） */
+/** 全库去重项目/文件夹路径（规范化；datalist/筛选下拉用） */
 export async function getAllProjects() {
   const all = await getAllNotes();
   const seen = new Set();
-  for (const n of all) {
-    const p = String(n.project || '').trim();
-    if (p) seen.add(p);
+  for (const n of all) seen.add(normalizeProject(n.project));
+  return [...seen].sort((a, b) => a.localeCompare(b, 'zh'));
+}
+
+/* ══════════════════════════════════════════════════════════
+   文件夹（= project 路径）管理（需求 20260911 ③④）
+   folder_store：显式登记的文件夹（支持预先创建空文件夹）；
+   目录页展示 = folder_store ∪ 记录中的 project 去重。
+   ══════════════════════════════════════════════════════════ */
+
+/** 显式登记的文件夹列表（按 path 排序） */
+export async function getFolders() {
+  const db = await openDB();
+  const list = await new Promise((resolve, reject) => {
+    const req = db.transaction(FOLDER_STORE, 'readonly').objectStore(FOLDER_STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+  return list.sort((a, b) => String(a.path).localeCompare(String(b.path), 'zh'));
+}
+
+/** 目录页/文件夹页用：全部文件夹路径 = folder_store ∪ 记录 project（规范化去重） */
+export async function getAllFolderPaths() {
+  const [folders, notes, projects] = await Promise.all([getFolders(), getAllNotes(), getAllProjects()]);
+  const set = new Set(folders.map((f) => normalizeProject(f.path)));
+  projects.forEach((p) => set.add(p));
+  return [...set].sort((a, b) => a.localeCompare(b, 'zh'));
+}
+
+/** 新建文件夹（幂等：已存在返回既有记录；路径规范化） */
+export async function createFolder(path) {
+  const p = normalizeProject(path);
+  if (p === OTHERS_FOLDER) throw new Error('「other」为系统默认文件夹，无需创建');
+  const db = await openDB();
+  const existing = await new Promise((resolve, reject) => {
+    const req = db.transaction(FOLDER_STORE, 'readonly').objectStore(FOLDER_STORE).get(p);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+  if (existing) return existing;
+  const rec = { path: p, createdAt: Date.now() };
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(FOLDER_STORE, 'readwrite');
+    tx.objectStore(FOLDER_STORE).put(rec);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+  return rec;
+}
+
+/**
+ * 重命名文件夹：folder_store 条目与其**子树**条目改路径，同时把子树内所有记录的 project 改根。
+ * @returns {Promise<number>} 受影响记录数
+ */
+export async function renameFolder(oldPath, newPath) {
+  const from = normalizeProject(oldPath);
+  const to = normalizeProject(newPath);
+  if (from === to) return 0;
+  if (from === OTHERS_FOLDER) throw new Error('「other」为系统默认文件夹，不能重命名');
+  if (to === OTHERS_FOLDER) throw new Error('目标名不能是保留名「other」');
+  // 冲突检查：目标已存在（显式文件夹或已有记录）
+  const [folders, paths] = await Promise.all([getFolders(), getAllFolderPaths()]);
+  if (paths.includes(to)) throw new Error(`文件夹「${to}」已存在`);
+
+  // ① folder_store：from 子树 → to 子树
+  const db = await openDB();
+  const targets = folders.filter((f) => f.path === from || f.path.startsWith(from + '/'));
+  if (targets.length) {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(FOLDER_STORE, 'readwrite');
+      const store = tx.objectStore(FOLDER_STORE);
+      for (const f of targets) {
+        store.delete(f.path);
+        store.put({ path: rebasePath(f.path, from, to), createdAt: f.createdAt || Date.now() });
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
   }
-  return [...seen];
+  // ② 记录：子树 project 改根
+  const all = await getAllNotes();
+  let changed = 0;
+  for (const n of all) {
+    const p = normalizeProject(n.project);
+    if (p !== from && !p.startsWith(from + '/')) continue;
+    await addNote({ ...n, project: rebasePath(p, from, to), updatedAt: Date.now() });
+    changed++;
+  }
+  return changed;
+}
+
+/**
+ * 删除文件夹：移除登记条目，其下（含子树）记录 project 置 other（**不删笔记**）。
+ * @returns {Promise<{movedToOther:number}>}
+ */
+export async function deleteFolder(path) {
+  const p = normalizeProject(path);
+  if (p === OTHERS_FOLDER) throw new Error('「other」为系统默认文件夹，不能删除');
+  const db = await openDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(FOLDER_STORE, 'readwrite');
+    tx.objectStore(FOLDER_STORE).delete(p);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+  // 子文件夹登记也一并移除
+  const folders = await getFolders();
+  const subs = folders.filter((f) => f.path.startsWith(p + '/'));
+  if (subs.length) {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(FOLDER_STORE, 'readwrite');
+      subs.forEach((f) => tx.objectStore(FOLDER_STORE).delete(f.path));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  }
+  // 记录移入 other
+  const all = await getAllNotes();
+  let moved = 0;
+  for (const n of all) {
+    const np = normalizeProject(n.project);
+    if (np !== p && !np.startsWith(p + '/')) continue;
+    await addNote({ ...n, project: OTHERS_FOLDER, updatedAt: Date.now() });
+    moved++;
+  }
+  return { movedToOther: moved };
+}
+
+/**
+ * 批量移动记录到文件夹（需求 ⑥）：可选新建并移入。
+ * @returns {Promise<{moved:number, folder:string}>}
+ */
+export async function moveNotesToFolder(ids, folderPath, { createIfMissing = false } = {}) {
+  const p = normalizeProject(folderPath);
+  if (createIfMissing && p !== OTHERS_FOLDER) await createFolder(p);
+  const want = new Set((ids || []).map(String));
+  const all = await getAllNotes();
+  let moved = 0;
+  for (const n of all) {
+    if (!want.has(String(n.id))) continue;
+    if (normalizeProject(n.project) === p) continue;
+    await addNote({ ...n, project: p, updatedAt: Date.now() });
+    moved++;
+  }
+  return { moved, folder: p };
 }
 
 /** 笔记总数 */
@@ -1284,6 +1435,13 @@ window.getDomainNameMap = getDomainNameMap;
 window.ingestImageFiles = ingestImageFiles;
 window.collectImageFiles = collectImageFiles;
 window.getNoteById = getNoteById;
+window.getFolders = getFolders;
+window.getAllFolderPaths = getAllFolderPaths;
+window.createFolder = createFolder;
+window.renameFolder = renameFolder;
+window.deleteFolder = deleteFolder;
+window.moveNotesToFolder = moveNotesToFolder;
+window.normalizeProject = normalizeProject;
 window.saveLocalGraph = saveLocalGraph;
 window.getLocalGraph = getLocalGraph;
 window.clearLocalGraph = clearLocalGraph;
