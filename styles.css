@@ -1179,6 +1179,14 @@ a.tag:hover {
   margin: 0 0 10px;
 }
 .note-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+/* 单篇操作行（需求 20260917 ②.2）：卡片内联小按钮，点击不触发卡片跳转（JS stopPropagation） */
+.note-card .card-actions {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px dashed var(--line, #eee5d5);
+}
+.note-card .card-actions .btn { padding: 2px 10px; font-size: 12px; }
+.note-card .card-actions .btn.danger { color: #c0392b; }
 .note-card .pick { position: absolute; top: 10px; right: 10px; width: 18px; height: 18px; }
 .note-card { position: relative; }
 .folder-page-top #back-btn { margin-bottom: 4px; }

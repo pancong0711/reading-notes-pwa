@@ -9,7 +9,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v36';
+var CACHE_NAME = 'reading-notes-v37';   // v37: 20260917 面板互斥/多选修复/卡片操作/合并归属保留
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [

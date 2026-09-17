@@ -196,7 +196,7 @@ function renderTypeManager() {
 
 function openManager() {
   renderTypeManager();
-  els.manage.hidden = false;
+  showPanel('type-manage');
 }
 
 /* ── 标签整理面板 ── */
@@ -217,7 +217,7 @@ async function renderTagManager() {
 
 async function openTagManager() {
   await renderTagManager();
-  els.tagManage.hidden = false;
+  showPanel('tag-manage');
 }
 
 /* ── 导入 / 导出 / 同步 ── */
@@ -249,6 +249,30 @@ async function downloadBackup(prefix = '读书笔记-导入前备份') {
  */
 let importSource = '';
 
+/* ── 面板互斥（需求 20260917 ①：开新关旧，根除二级弹窗被一级盖住）──
+ * showPanel(id) 关掉其余面板再开目标；closeAllPanels() 全关；backToHub() 二级关闭回中枢。 */
+const PANEL_IDS = ['tag-manage', 'type-manage', 'backup-panel', 'export-panel', 'import-panel', 'data-hub'];
+
+function showPanel(id) {
+  for (const pid of PANEL_IDS) {
+    const el = $(pid);
+    if (el) el.hidden = pid !== id;
+  }
+}
+
+function closeAllPanels() {
+  for (const pid of PANEL_IDS) {
+    const el = $(pid);
+    if (el) el.hidden = true;
+  }
+}
+
+function backToHub() {
+  closeAllPanels();
+  const hub = $('data-hub');
+  if (hub) hub.hidden = false;
+}
+
 async function openImportDialog(pkg, source) {
   importSource = source;
   const diff = await diffNotePackage(pkg);
@@ -265,11 +289,11 @@ async function openImportDialog(pkg, source) {
     `本端更新 ${fmtCount(diff.localNewer.length)} ｜ 不变 ${fmtCount(diff.unchanged)} ｜ 本端独有 ${fmtCount(diff.localOnly)}\n` +
     `标签：${stats.tagRecords} 条记录 · ${stats.tagKinds} 个 ｜ 概念：${stats.conceptRecords} 条记录 · ${stats.conceptKinds} 个` +
     (catLine ? `\n${catLine}` : '');
-  els.importPanel.hidden = false;
+  showPanel('import-panel');
 }
 
 function closeImportDialog() {
-  els.importPanel.hidden = true;
+  closeAllPanels();   // 20260917 ①：互斥收口（确认导入后结束流程，状态行留在页面）
   pendingImport = null;
 }
 
@@ -324,7 +348,7 @@ async function confirmImport() {
   } catch (e) {
     toast(`导入失败：${e.message}`, 4200);
   } finally {
-    closeImportDialog();
+    closeImportDialog();   // 结束流程：面板全关，结果状态行内联显示在页面
   }
 }
 
@@ -338,7 +362,7 @@ async function openBackupPanel() {
   els.backupType.innerHTML = NoteTypes.getTypes(false)
     .map((t) => `<option value="${esc(t.key)}">${t.icon} ${esc(t.label)}</option>`).join('');
   const cur = host.getCurrentType?.(); if (cur) els.backupType.value = cur.key;
-  els.backupPanel.hidden = false;
+  showPanel('backup-panel');
   await refreshBackupStats();
 }
 
@@ -388,7 +412,7 @@ async function doBackupExport() {
     a.download = `读书笔记-迁移包-${fileLabel}-${todayStr().replace(/-/g, '')}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
-    els.backupPanel.hidden = true;
+    backToHub();   // 导出完成回中枢（20260917 决策 ②）
     toast(`已导出迁移包：${list.length} 条${includeImages ? `（含图片 ${nImg} 张）` : ''}`);
   } catch (e) {
     toast(`导出失败：${e.message}`, 4200);
@@ -477,7 +501,7 @@ async function doPrintDraft() {
   const title = `读书笔记 · ${scopeLabel(scope.scope, { label: scope.label, dateFrom: scope.dateFrom, dateTo: scope.dateTo })}`;
   const html = buildPrintHtml(list, title, catalogByIdMap());
   printHtmlFrame(html);
-  els.exportPanel.hidden = true;
+  backToHub();   // 生成后回中枢（20260917 决策 ②）
   toast('已打开打印窗口，可在打印对话框选择「另存为 PDF」');
 }
 
@@ -499,7 +523,7 @@ async function doDownloadMd() {
   a.download = `书稿-${fileLabel}-${todayStr().replace(/-/g, '')}.md`;
   a.click();
   URL.revokeObjectURL(a.href);
-  els.exportPanel.hidden = true;
+  backToHub();   // 下载后回中枢（20260917 决策 ②）
   toast('已下载书稿 markdown');
 }
 
@@ -507,27 +531,27 @@ async function doDownloadMd() {
 /* ── 数据中枢与绑定 ── */
 
 function openHub() {
-  els.hub.hidden = false;
+  showPanel('data-hub');
 }
 
 function bind() {
   const on = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
-  on('data-sync', () => { els.hub.hidden = true; syncFromCli().catch((e) => toast('同步失败：' + e.message, 4200)); });
-  on('data-import', () => els.importFile.click());
-  on('data-backup', () => { els.hub.hidden = true; openBackupPanel(); });
-  on('data-export', () => { els.hub.hidden = true; renderExportSelects().then(() => { els.exportPanel.hidden = false; }); });
-  on('data-types', () => { els.hub.hidden = true; openManager(); });
-  on('data-tags', () => { els.hub.hidden = true; openTagManager(); });
-  on('data-close', () => { els.hub.hidden = true; });
+  on('data-sync', () => { closeAllPanels(); syncFromCli().catch((e) => toast('同步失败：' + e.message, 4200)); });
+  on('data-import', () => { closeAllPanels(); els.importFile.click(); });   // 先关中枢：选完文件后导入面板不被盖住（需求 ①根因）
+  on('data-backup', () => openBackupPanel());
+  on('data-export', () => renderExportSelects().then(() => showPanel('export-panel')));
+  on('data-types', () => openManager());
+  on('data-tags', () => openTagManager());
+  on('data-close', () => closeAllPanels());
   on('import-confirm', confirmImport);
-  on('import-cancel', closeImportDialog);
+  on('import-cancel', () => { backToHub(); });
   on('export-print-btn', doPrintDraft);
   on('export-md-btn', doDownloadMd);
-  on('export-close', () => { els.exportPanel.hidden = true; });
+  on('export-close', () => { backToHub(); });
   on('backup-export-btn', doBackupExport);
-  on('backup-close', () => { els.backupPanel.hidden = true; });
-  on('type-manage-close', () => { els.manage.hidden = true; });
-  on('tag-manage-close', () => { els.tagManage.hidden = true; });
+  on('backup-close', () => { backToHub(); });
+  on('type-manage-close', () => { backToHub(); });
+  on('tag-manage-close', () => { backToHub(); });
   const fileEl = $('import-file');
   if (fileEl) fileEl.addEventListener('change', () => {
     if (fileEl.files[0]) doImport(fileEl.files[0]);
@@ -600,6 +624,11 @@ export function mountDataActions(hostCtx = {}) {
     const wrap = document.createElement('div');
     wrap.innerHTML = PANELS_HTML;
     while (wrap.firstChild) document.body.appendChild(wrap.firstChild);
+  }
+  // 面板互斥兜底：panel-modal.js 的 MutationObserver 对后插入面板同样生效（需求 20260917 ①）
+  if (window.PanelModal) {
+    if (window.PanelModal.bind) window.PanelModal.bind();
+    if (window.PanelModal.enforceMutualExclusion) window.PanelModal.enforceMutualExclusion();
   }
   Object.assign(els, {
     hub: $('data-hub'),

@@ -7,7 +7,7 @@
  *   · 点笔记卡片 → note.html?id= 详情页
  */
 import {
-  getAllNotes, getAllFolderPaths, moveNotesToFolder, getConceptCatalog,
+  getAllNotes, getAllFolderPaths, moveNotesToFolder, getConceptCatalog, deleteNote,
 } from './data.js';
 import {
   normalizeProject, splitPath, buildTree, directChildren, filterNotes, typeCounts,
@@ -44,6 +44,7 @@ let conceptCatalog = [];
 let folderPath = normalizeProject(P);
 let filters = { types: [], q: '', dateFrom: '', dateTo: '' };
 let selecting = false;
+let moveTargets = [];   // 待移动的 id 列表（多选=selected，单篇=卡片「📁」按钮）
 const selected = new Set();
 
 /* ── 数据 ── */
@@ -119,6 +120,13 @@ async function render() {
     card.dataset.id = n.id;
     if (selected.has(String(n.id))) card.classList.add('selected');
     const preview = String(n.content || n.readerNote || n.aiNote || '').replace(/\s+/g, ' ').slice(0, 90);
+    // 单篇操作行（需求 20260917 ②.2）：非多选模式常显；多选模式隐藏避免误触
+    const actions = !selecting ? `
+      <div class="card-actions">
+        <button class="btn ghost small" data-act="edit" type="button" title="编辑">✏️ 编辑</button>
+        <button class="btn ghost small" data-act="move" type="button" title="移动">📁 移动</button>
+        <button class="btn ghost small danger" data-act="del" type="button" title="删除">🗑 删除</button>
+      </div>` : '';
     card.innerHTML = `
       ${selecting ? `<input type="checkbox" class="pick" data-pick="${esc(n.id)}" ${selected.has(String(n.id)) ? 'checked' : ''}>` : ''}
       <div class="note-thumb note-thumb-empty">${esc((window.NoteTypes && NoteTypes.getType(n.type || 'note') || {}).icon || '📝')}</div>
@@ -127,9 +135,12 @@ async function render() {
         <h3 class="note-title">${esc(n.title || '未命名')}</h3>
         ${preview ? `<p class="note-note">${esc(preview)}${String(n.content || '').length > 90 ? '…' : ''}</p>` : ''}
         ${Array.isArray(n.tags) && n.tags.length ? `<div class="note-tags">${n.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
+        ${actions}
       </div>`;
     card.addEventListener('click', (e) => {
-      if (e.target.closest('[data-pick]')) return;   // 勾选不跳转
+      const act = e.target.closest('[data-act]');
+      if (act) { e.stopPropagation(); handleCardAction(act.dataset.act, n); return; }   // 单篇操作按钮（需求 ②.2）
+      if (e.target.closest('[data-pick]')) return;   // 勾选不跳转（change 委托负责选中）
       if (selecting) {
         const id = String(n.id);
         if (selected.has(id)) selected.delete(id); else selected.add(id);
@@ -150,7 +161,27 @@ function updateBulkBar() {
   $('select-toggle').textContent = selecting ? '✖ 退出多选' : '☑ 多选';
   $('select-all').hidden = !selecting;
   $('move-btn').hidden = !selecting;
+  $('delete-btn').hidden = !selecting;
   $('bulk-count').textContent = selecting ? `已选 ${selected.size} 篇` : '';
+}
+
+/* ── 单篇操作（需求 20260917 ②.2）：编辑 / 移动 / 删除 ── */
+
+function handleCardAction(act, n) {
+  if (act === 'edit') {
+    location.href = `type.html?t=${encodeURIComponent(n.type || 'note')}&edit=${encodeURIComponent(n.id)}`;
+    return;
+  }
+  if (act === 'move') {
+    openMovePanel([String(n.id)]);   // 单篇版移动面板（复用 move-panel）
+    return;
+  }
+  if (act === 'del') {
+    if (!confirm(`删除笔记「${n.title || '未命名'}」？\n此操作不可撤销；其他终端上的同条笔记不受影响（删除不跨端同步）。`)) return;
+    deleteNote(String(n.id))
+      .then(async () => { toast('已删除'); await loadData(); await render(); })
+      .catch((e) => toast(`删除失败：${e.message}`, 4200));
+  }
 }
 
 /* ── 多选 / 移动 ── */
@@ -171,12 +202,13 @@ function selectAllVisible() {
   render();
 }
 
-async function openMovePanel() {
-  if (!selected.size) { toast('请先勾选要移动的笔记'); return; }
+async function openMovePanel(ids) {
+  moveTargets = (ids && ids.length ? ids : [...selected]).map(String);
+  if (!moveTargets.length) { toast('请先勾选要移动的笔记'); return; }
   const paths = await getAllFolderPaths();
   $('move-select').innerHTML = paths.map((p) => `<option value="${esc(p)}"${p === folderPath ? ' selected' : ''}>${esc(p)}</option>`).join('');
   $('move-new').value = '';
-  $('move-info').textContent = `将移动 ${selected.size} 篇笔记（当前文件夹：${folderPath}）`;
+  $('move-info').textContent = `将移动 ${moveTargets.length} 篇笔记（当前文件夹：${folderPath}）`;
   $('move-panel').hidden = false;
 }
 
@@ -184,11 +216,11 @@ async function confirmMove() {
   const newPath = $('move-new').value.trim();
   const target = newPath || $('move-select').value;
   try {
-    const { moved, folder } = await moveNotesToFolder([...selected], target, { createIfMissing: !!newPath });
-    toast(`已移动 ${moved} 篇 → ${folder}`);
+    const { moved, skipped, folder } = await moveNotesToFolder(moveTargets, target, { createIfMissing: !!newPath });
+    const skipTxt = skipped ? `（${skipped} 篇已在目标文件夹，跳过）` : '';
+    toast(`已移动 ${moved} 篇 → ${folder}${skipTxt}`);
     $('move-panel').hidden = true;
-    selected.clear();
-    selecting = false;
+    selected.clear();   // 20260917 决策：保持多选模式便于连续整理，仅清空选中
     await loadData();
     await render();
   } catch (e) {
@@ -230,7 +262,34 @@ $('new-note-btn').addEventListener('click', () => {
 });
 $('select-toggle').addEventListener('click', toggleSelect);
 $('select-all').addEventListener('click', selectAllVisible);
-$('move-btn').addEventListener('click', openMovePanel);
+$('move-btn').addEventListener('click', () => openMovePanel());
+$('delete-btn').addEventListener('click', bulkDelete);
+
+/* 多选修复（需求 20260917 ②根因）：勾选框此前未绑定任何事件、点击被卡片 click 吞掉，
+ * selected 恒空 → "逐一点击显示 0 篇"。现用 change 委托：点勾选框=选中该篇，
+ * 与点卡片空白处同语义（一处状态源 selected Set）。 */
+$('note-list').addEventListener('change', (e) => {
+  const cb = e.target.closest('[data-pick]');
+  if (!cb) return;
+  const id = String(cb.dataset.pick);
+  if (cb.checked) selected.add(id); else selected.delete(id);
+  const card = cb.closest('.note-card');
+  if (card) card.classList.toggle('selected', cb.checked);
+  updateBulkBar();
+});
+
+async function bulkDelete() {
+  if (!selected.size) { toast('请先勾选要删除的笔记'); return; }
+  if (!confirm(`删除已选 ${selected.size} 篇笔记？\n此操作不可撤销；其他终端上的相同笔记不受影响（删除不跨端同步）。`)) return;
+  try {
+    const ids = [...selected];
+    for (const id of ids) await deleteNote(id);
+    toast(`已删除 ${ids.length} 篇`);
+    selected.clear();
+    await loadData();
+    await render();
+  } catch (e) { toast(`删除失败：${e.message}`, 4200); }
+}
 $('move-cancel').addEventListener('click', () => { $('move-panel').hidden = true; });
 $('move-confirm').addEventListener('click', confirmMove);
 

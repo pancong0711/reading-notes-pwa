@@ -1,7 +1,7 @@
 /* folders.js —— 📒 笔记目录页（需求 20260911 ⑤）
  *
  * 文件夹卡片网格（层级由 folder-util 前缀树给出；根级显示顶级文件夹 + other）：
- *   · 卡片：名称 · 直属/含子树条数 · 类型徽标 · 最近更新 · ⋯（重命名/删除）
+ *   · 卡片：名称 · 直属/含子树条数 · 类型徽标 · 最近更新 · ⋯（重命名/移动/删除；20260917 ②.2 补移动）
  *   · 「＋ 新建文件夹」（支持 a/b 路径）；「✏️ 管理」进入卡片管理模式
  *   · 点卡片 → folder.html?p=<路径>
  */
@@ -81,6 +81,7 @@ async function render() {
         <h3>${esc(node.name)}</h3>
         ${manageMode ? `<span class="folder-card-actions">
             <button class="btn ghost small" data-act="rename" type="button">重命名</button>
+            <button class="btn ghost small" data-act="move" type="button">移动</button>
             <button class="btn ghost small danger" data-act="delete" type="button">删除</button>
           </span>` : ''}
       </div>
@@ -112,6 +113,16 @@ async function render() {
         $('folder-panel-msg').textContent = '';
         $('folder-panel').hidden = false;
         $('folder-path').focus();
+      } else if (btn.dataset.act === 'move') {
+        if (path === OTHERS) { toast('other 为系统默认文件夹，不能移动', 3600); return; }
+        // 移动 = 子树换根（与重命名同机制）：输入完整新路径（可含新父级）
+        const to = prompt(`移动文件夹（输入完整新路径，可换父级）：\n当前：${path}`, path);
+        if (!to || !to.trim() || to.trim() === path) return;
+        try {
+          const changed = await renameFolder(path, to.trim());
+          toast(`已移动 → ${to.trim()}（受影响记录 ${changed} 篇）`);
+          await render();
+        } catch (err) { toast(`移动失败：${err.message}`, 4200); }
       } else if (btn.dataset.act === 'delete') {
         if (path === OTHERS) { toast('other 为系统默认文件夹，不能删除', 3600); return; }
         const stats = folderStats(notes, path);

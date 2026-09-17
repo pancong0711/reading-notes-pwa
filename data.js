@@ -515,8 +515,9 @@ export async function diffNotePackage(json) {
     const pkgTs = Number(item.updatedAt) || fallbackTs;
     if (!localRec) { diff.added.push(item); continue; }
     const localTs = Number(localRec.updatedAt) || 0;
-    if (pkgTs > localTs) diff.updated.push(item);
-    else if (pkgTs < localTs) diff.localNewer.push(item);
+    // _local：命中到的本端记录（merge 归属保留用；normalizeNote 不透传该键，无污染）
+    if (pkgTs > localTs) { item._local = localRec; diff.updated.push(item); }
+    else if (pkgTs < localTs) { item._local = localRec; diff.localNewer.push(item); }
     else diff.unchanged += 1;
   }
   for (const n of local) {
@@ -563,6 +564,20 @@ export function summarizePackage(json) {
 }
 
 /**
+ * 归属保留（需求 20260917 决策 ①）：merge 覆盖已有记录时，project/tags/concepts
+ * **以本端为准**——本端非空则保留（不改变正在使用的终端的管理），本端为空才从包补齐。
+ * 内容字段（title/content 等）不受影响，仍按 updatedAt 新者胜。
+ */
+function keepLocalOwnership(rec, local) {
+  const lp = normalizeProject(local.project);
+  if (lp && lp !== OTHERS_FOLDER) rec.project = lp;
+  const lt = Array.isArray(local.tags) ? local.tags.filter(Boolean) : [];
+  if (lt.length) rec.tags = lt;
+  const lc = Array.isArray(local.concepts) ? local.concepts.filter(Boolean) : [];
+  if (lc.length) rec.concepts = lc;
+}
+
+/**
  * 按策略应用导入包。策略：merge=智能合并（新增+包内较新覆盖，本端较新保留）
  * / new=仅新增 / replace=完整替换。books 一律按包覆盖。
  * 包内概念目录（conceptCatalog）一律**增量并入**工作副本：只补缺，不覆盖本端已有
@@ -590,7 +605,9 @@ export async function mergeNotePackage(json, strategy) {
       ? diff.added
       : diff.added.concat(diff.updated);
     for (const item of items) {
-      await addNote(normalizeNote(item, 0));
+      const rec = normalizeNote(item, 0);
+      if (item._local) keepLocalOwnership(rec, item._local);   // 20260917 决策 ①
+      await addNote(rec);
       applied += 1;
     }
   }
@@ -791,7 +808,7 @@ export async function deleteFolder(path) {
 
 /**
  * 批量移动记录到文件夹（需求 ⑥）：可选新建并移入。
- * @returns {Promise<{moved:number, folder:string}>}
+ * @returns {Promise<{moved:number, skipped:number, folder:string}>} skipped=已在目标文件夹而跳过
  */
 export async function moveNotesToFolder(ids, folderPath, { createIfMissing = false } = {}) {
   const p = normalizeProject(folderPath);
@@ -799,13 +816,14 @@ export async function moveNotesToFolder(ids, folderPath, { createIfMissing = fal
   const want = new Set((ids || []).map(String));
   const all = await getAllNotes();
   let moved = 0;
+  let skipped = 0;
   for (const n of all) {
     if (!want.has(String(n.id))) continue;
-    if (normalizeProject(n.project) === p) continue;
+    if (normalizeProject(n.project) === p) { skipped++; continue; }
     await addNote({ ...n, project: p, updatedAt: Date.now() });
     moved++;
   }
-  return { moved, folder: p };
+  return { moved, skipped, folder: p };
 }
 
 /** 笔记总数 */
