@@ -7,7 +7,7 @@
  *   · 点笔记卡片 → note.html?id= 详情页
  */
 import {
-  getAllNotes, getAllFolderPaths, moveNotesToFolder, getConceptCatalog, deleteNote,
+  getAllNotes, getAllFolderPaths, moveNotesToFolder, getConceptCatalog, deleteNote, setNotePinned,
 } from './data.js';
 import {
   normalizeProject, splitPath, buildTree, directChildren, filterNotes, typeCounts,
@@ -37,6 +37,17 @@ function typeLabel(key) {
     if (t) return `${t.icon} ${t.label}`;
   } catch (e) { /* ignore */ }
   return key;
+}
+
+/** ✎ 更新徽标（需求 20260922 A）：内容编辑时间比内容日期晚一天以上才显示「✎ MM-DD」 */
+function editBadge(n) {
+  if (!n.updatedAt) return '';
+  const base = n.date ? new Date(`${n.date}T00:00:00`).getTime() : NaN;
+  const diffDays = (Number(n.updatedAt) - base) / 86400000;
+  if (!(diffDays >= 1)) return '';
+  const td = new Date(Number(n.updatedAt));
+  const label = `${String(td.getMonth() + 1).padStart(2, '0')}-${String(td.getDate()).padStart(2, '0')}`;
+  return ` · <span class="edit-badge" title="最近内容编辑时间">✎ ${label}</span>`;
 }
 
 let notesCache = [];
@@ -82,8 +93,12 @@ function renderTypeChips(notes) {
 }
 
 function visibleNotes() {
+  // 排序三键（需求 20260922 A）：置顶优先 → updatedAt 倒序 → 内容日期兜底（与 data.js getAllNotes 同口径）
   return filterNotes(notesCache, { ...filters, folder: folderPath, subtree: false })
-    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    .sort((a, b) =>
+      (!!b.pinned - !!a.pinned)
+      || (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0)
+      || String(b.date || '').localeCompare(String(a.date || '')));
 }
 
 async function render() {
@@ -120,9 +135,10 @@ async function render() {
     card.dataset.id = n.id;
     if (selected.has(String(n.id))) card.classList.add('selected');
     const preview = String(n.content || n.readerNote || n.aiNote || '').replace(/\s+/g, ' ').slice(0, 90);
-    // 单篇操作行（需求 20260917 ②.2）：非多选模式常显；多选模式隐藏避免误触
+    // 单篇操作行（需求 20260917 ②.2）：非多选模式常显；多选模式隐藏避免误触；⭐ 置顶（20260922 B）
     const actions = !selecting ? `
       <div class="card-actions">
+        <button class="btn ghost small" data-act="pin" type="button" title="${n.pinned ? '取消置顶' : '置顶'}">${n.pinned ? '⭐ 已置顶' : '☆ 置顶'}</button>
         <button class="btn ghost small" data-act="edit" type="button" title="编辑">✏️ 编辑</button>
         <button class="btn ghost small" data-act="move" type="button" title="移动">📁 移动</button>
         <button class="btn ghost small danger" data-act="del" type="button" title="删除">🗑 删除</button>
@@ -131,7 +147,7 @@ async function render() {
       ${selecting ? `<input type="checkbox" class="pick" data-pick="${esc(n.id)}" ${selected.has(String(n.id)) ? 'checked' : ''}>` : ''}
       <div class="note-thumb note-thumb-empty">${esc((window.NoteTypes && NoteTypes.getType(n.type || 'note') || {}).icon || '📝')}</div>
       <div class="note-body">
-        <div class="note-meta">${esc(typeLabel(n.type || 'note'))} · ${esc(n.date || '无日期')}${n.book ? ' · 《' + esc(n.book) + '》' : ''}</div>
+        <div class="note-meta">${n.pinned ? '📌 ' : ''}${esc(typeLabel(n.type || 'note'))} · ${esc(n.date || '无日期')}${editBadge(n)}${n.book ? ' · 《' + esc(n.book) + '》' : ''}</div>
         <h3 class="note-title">${esc(n.title || '未命名')}</h3>
         ${preview ? `<p class="note-note">${esc(preview)}${String(n.content || '').length > 90 ? '…' : ''}</p>` : ''}
         ${Array.isArray(n.tags) && n.tags.length ? `<div class="note-tags">${n.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
@@ -167,7 +183,17 @@ function updateBulkBar() {
 
 /* ── 单篇操作（需求 20260917 ②.2）：编辑 / 移动 / 删除 ── */
 
-function handleCardAction(act, n) {
+async function handleCardAction(act, n) {
+  if (act === 'pin') {
+    // ⭐ 置顶/取消置顶（需求 20260922 B）：本端偏好，不推时钟、不入年表
+    try {
+      await setNotePinned([String(n.id)], !n.pinned);
+      await loadData();
+      await render();
+      toast(n.pinned ? '已取消置顶' : '已置顶，将在列表顶部显示');
+    } catch (e) { toast(`置顶操作失败：${e.message}`, 4200); }
+    return;
+  }
   if (act === 'edit') {
     location.href = `type.html?t=${encodeURIComponent(n.type || 'note')}&edit=${encodeURIComponent(n.id)}`;
     return;

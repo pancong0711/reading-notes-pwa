@@ -180,7 +180,16 @@ function normalizeConcepts(concepts) {
 }
 
 /** 规整单条笔记：补全缺省字段、统一字段类型、保留 type（默认 note） */
-function normalizeNote(raw, index) {
+/**
+ * 导入包的时间锚点：exportedAt（ISO 字符串或毫秒）→ 毫秒，无效返回 undefined。
+ * 导入路径缺 updatedAt 的笔记以此兜底（需求 20260922 时间戳语义修复）。
+ */
+function exportedTsOf(json) {
+  const t = json && json.exportedAt ? new Date(json.exportedAt).getTime() : NaN;
+  return Number.isFinite(t) ? t : undefined;
+}
+
+function normalizeNote(raw, index, ctx) {
   const id = raw.id != null ? String(raw.id) : `note-${Date.now()}-${++_noteSeq}`;
   return {
     id,
@@ -204,9 +213,15 @@ function normalizeNote(raw, index) {
     extension: raw.extension || '',
     concepts: normalizeConcepts(raw.concepts),
     project: normalizeProject(raw.project),   // 文件夹/项目路径（规范化；空 → other，不留空）
+    pinned: !!raw.pinned,           // 置顶（需求 20260922 B：本端阅读偏好，不入内容编辑时间轴）
+    history: Array.isArray(raw.history)
+      ? raw.history.filter((e) => e && typeof e === 'object' && e.k).slice(-20)
+      : [],                        // 简要年表（需求 20260922 C：仅内容类事件，FIFO≤20，v1 本端不入包）
     meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {},   // 类型特有字段（memo: done/due 等）
     createdAt: raw.createdAt || Date.now(),
-    updatedAt: raw.updatedAt || Date.now(),
+    // 导入路径（ctx.tsFallback）锚定包 exportedAt：导入是搬运、不是编辑（需求 20260922
+    // 时间戳语义修复）；仅无 ctx 的本地常规新增才兜底当前时间。
+    updatedAt: raw.updatedAt || (ctx && ctx.tsFallback) || Date.now(),
   };
 }
 
@@ -377,7 +392,8 @@ export async function renameTag(oldTag, newTag) {
   for (const n of all) {
     if (!Array.isArray(n.tags) || !n.tags.includes(oldTag)) continue;
     const tags = normalizeTags(n.tags.map((t) => (t === oldTag ? target : t)));
-    await addNote({ ...n, tags, updatedAt: Date.now() });
+    // 标签改名 = 归属整理，不推 updatedAt（需求 20260922 时间戳语义修复）
+    await addNote({ ...n, tags });
     changed++;
   }
   return changed;
@@ -390,7 +406,8 @@ export async function deleteTag(tag) {
   for (const n of all) {
     if (!Array.isArray(n.tags) || !n.tags.includes(tag)) continue;
     const tags = normalizeTags(n.tags.filter((t) => t !== tag));
-    await addNote({ ...n, tags, updatedAt: Date.now() });
+    // 标签删除 = 归属整理，不推 updatedAt（需求 20260922 时间戳语义修复）
+    await addNote({ ...n, tags });
     changed++;
   }
   return changed;
@@ -463,7 +480,11 @@ export async function importNotePackage(json) {
     : json && Array.isArray(json.notes)
       ? json.notes
       : [];
-  const notes = list.map((raw, i) => normalizeNote(raw, i));
+  const notes = list.map((raw, i) => normalizeNote(raw, i, { tsFallback: exportedTsOf(json) }));
+  for (const n of notes) {
+    // 批量导入事件（需求 20260922 C）：完整替换也属「来源变化」，逐条打 import 账
+    n.history = (n.history || []).concat([{ t: Date.now(), k: 'import' }]).slice(-20);
+  }
   await replaceAll(notes);
   if (json && !Array.isArray(json) && Array.isArray(json.books)) {
     await saveBooks(json.books);
@@ -575,6 +596,7 @@ function keepLocalOwnership(rec, local) {
   if (lt.length) rec.tags = lt;
   const lc = Array.isArray(local.concepts) ? local.concepts.filter(Boolean) : [];
   if (lc.length) rec.concepts = lc;
+  if (local.pinned) rec.pinned = true;   // 置顶=本端阅读偏好（需求 20260922 B）
 }
 
 /**
@@ -597,7 +619,7 @@ export async function mergeNotePackage(json, strategy) {
   const diff = await diffNotePackage(json);
   let applied = 0;
   if (strategy === 'replace') {
-    const notes = list.map((raw, i) => normalizeNote(raw, i));
+    const notes = list.map((raw, i) => normalizeNote(raw, i, { tsFallback: exportedTsOf(json) }));
     await replaceAll(notes);
     applied = notes.length;
   } else {
@@ -605,9 +627,10 @@ export async function mergeNotePackage(json, strategy) {
       ? diff.added
       : diff.added.concat(diff.updated);
     for (const item of items) {
-      const rec = normalizeNote(item, 0);
+      const rec = normalizeNote(item, 0, { tsFallback: exportedTsOf(json) });
       if (item._local) keepLocalOwnership(rec, item._local);   // 20260917 决策 ①
-      await addNote(rec);
+      // 年表标注：包内内容导入覆盖/新增 → import（需求 20260922 C）
+      await addNote(rec, { histK: 'import' });
       applied += 1;
     }
   }
@@ -656,7 +679,13 @@ export async function getAllNotes(type) {
     request.onerror = () => reject(request.error);
   });
   const filtered = type ? notes.filter((n) => (n.type || 'note') === type) : notes;
-  filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  // 排序三键（需求 20260922 A）：置顶优先 → updatedAt（内容编辑时间）倒序 → 内容日期倒序兜底。
+  // updatedAt 语义见 20260922 时间戳修复：仅内容编辑推进，归属整理/导入不再污染。
+  const tsOf = (n) => Number(n.updatedAt) || 0;
+  filtered.sort((a, b) =>
+    (!!b.pinned - !!a.pinned)
+    || tsOf(b) - tsOf(a)
+    || String(b.date || '').localeCompare(String(a.date || '')));
   return filtered;
 }
 
@@ -761,7 +790,7 @@ export async function renameFolder(oldPath, newPath) {
   for (const n of all) {
     const p = normalizeProject(n.project);
     if (p !== from && !p.startsWith(from + '/')) continue;
-    await addNote({ ...n, project: rebasePath(p, from, to), updatedAt: Date.now() });
+    await addNote({ ...n, project: rebasePath(p, from, to) });   // 子树改名=归属整理，不推 updatedAt（20260922）
     changed++;
   }
   return changed;
@@ -800,7 +829,7 @@ export async function deleteFolder(path) {
   for (const n of all) {
     const np = normalizeProject(n.project);
     if (np !== p && !np.startsWith(p + '/')) continue;
-    await addNote({ ...n, project: OTHERS_FOLDER, updatedAt: Date.now() });
+    await addNote({ ...n, project: OTHERS_FOLDER });   // 归属整理，不推 updatedAt（20260922）
     moved++;
   }
   return { movedToOther: moved };
@@ -820,7 +849,7 @@ export async function moveNotesToFolder(ids, folderPath, { createIfMissing = fal
   for (const n of all) {
     if (!want.has(String(n.id))) continue;
     if (normalizeProject(n.project) === p) { skipped++; continue; }
-    await addNote({ ...n, project: p, updatedAt: Date.now() });
+    await addNote({ ...n, project: p });   // 移动=归属整理，不推 updatedAt（20260922）
     moved++;
   }
   return { moved, skipped, folder: p };
@@ -841,8 +870,54 @@ export async function countNotes() {
  * 典型用法：{ title, book, date, readerNote, aiNote, imageData }
  * @returns {Promise<string>} 笔记 id
  */
-export async function addNote(note) {
+/* ── 简要年表（需求 20260922 C）────────────────────────────
+ * 仅内容类事件入账：edit（内容字段变化）/ concepts（概念变化）/ create（新建）；
+ * tags / project / pinned 纯归属变化**不入账、不推时钟**（与 20260922 时间戳语义一致）。
+ * 摘要只记元数据（字数/标题/日期/图片/概念数量），不存正文快照。
+ */
+const CONTENT_FIELDS = ['title', 'content', 'date', 'readerNote', 'aiNote', 'imageData', 'quotes', 'extension'];
+
+function historySummary(oldRec, rec) {
+  const parts = [];
+  if (String(oldRec.content || '') !== String(rec.content || '')) {
+    const d = String(rec.content || '').length - String(oldRec.content || '').length;
+    parts.push(`正文 ${d >= 0 ? '+' : ''}${d} 字`);
+  }
+  if (String(oldRec.title || '') !== String(rec.title || '')) parts.push(`标题变更`);
+  if (String(oldRec.date || '') !== String(rec.date || '')) parts.push(`日期 ${oldRec.date || '无'}→${rec.date || '无'}`);
+  const oi = (oldRec.images || []).length;
+  const ni = (rec.images || []).length;
+  if (oi !== ni) parts.push(`图片 ${oi}→${ni}`);
+  return parts.join(' · ');
+}
+
+function classifyHistory(oldRec, rec) {
+  if (!oldRec) return { k: 'create', d: '' };
+  const contentChanged = CONTENT_FIELDS.some((f) => JSON.stringify(oldRec[f] ?? '') !== JSON.stringify(rec[f] ?? ''));
+  const conceptsChanged = JSON.stringify(oldRec.concepts || []) !== JSON.stringify(rec.concepts || []);
+  if (contentChanged) return { k: 'edit', d: historySummary(oldRec, rec) };
+  if (conceptsChanged) return { k: 'concepts', d: `概念 ${oldRec.concepts?.length || 0}→${rec.concepts?.length || 0}` };
+  return null;   // 归属/整理/无变化 → 不入账（调用方不传事件时不推时钟）
+}
+
+const HISTORY_CAP = 20;
+
+export async function addNote(note, opts = {}) {
+  const oldRec = opts.skipHistory ? null
+    : (note && note.id != null ? await getNoteById(note.id) : null);
   const rec = normalizeNote(note, 0);
+  // 年表：仅内容/概念/新建/导入事件；纯归属变更不生成条目
+  const base = classifyHistory(oldRec, rec);
+  const ev = base && opts.histK && (base.k === 'edit' || base.k === 'create')
+    ? { k: opts.histK, d: base.d }    // 导入覆盖/新增改标为 import
+    : base;
+  // 年表以**库内真实记录**为底（防调用方 stale spread 把历史抹回旧值）
+  const baseList = oldRec && Array.isArray(oldRec.history) ? oldRec.history : (rec.history || []);
+  if (ev) {
+    rec.history = baseList.concat([{ t: Date.now(), k: ev.k, ...(ev.d ? { d: ev.d } : {}) }]).slice(-HISTORY_CAP);
+  } else if (oldRec) {
+    rec.history = baseList.slice(-HISTORY_CAP);   // 无事件也回写库内真值，防 spread 污染
+  }
   const db = await openDB();
   await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite');
@@ -853,6 +928,30 @@ export async function addNote(note) {
   });
   return rec.id;
 }
+
+/**
+ * 批量置顶/取消置顶（需求 20260922 B）：本端阅读偏好——不推 updatedAt、不入年表、
+ * 合并时 keepLocalOwnership 以本端为准。幂等：已是目标状态则跳过。
+ * @returns {Promise<number>} 实际变更条数
+ */
+export async function setNotePinned(ids, pinned) {
+  const want = new Set((ids || []).map(String));
+  const all = await getAllNotes();
+  let changed = 0;
+  for (const n of all) {
+    if (!want.has(String(n.id))) continue;
+    if (!!n.pinned === !!pinned) continue;
+    await addNote({ ...n, pinned: !!pinned }, optsPinnedPreserve());
+    changed++;
+  }
+  return changed;
+}
+
+/** 置顶批量写：直接写库（不经过年表 diff——pinned 是归属偏好） */
+function optsPinnedPreserve() {
+  return { skipHistory: true };
+}
+
 
 /** 删除单条笔记 */
 export async function deleteNote(id) {

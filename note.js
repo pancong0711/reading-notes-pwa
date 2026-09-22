@@ -5,6 +5,7 @@
  *   「✏️ 编辑」→ type.html?t=<type>&edit=<id>（统一编辑器，保存后回跳本页）
  *   「← 返回」→ history.back()（无来源时回 type.html?t=<type>）
  *   返回顶部 FAB（需求 20260905-②）：下滑超 400px 淡入，点击平滑回顶（reduced-motion 直跳）
+ *   📜 简要年表（需求 20260922 C）：内容类事件账本折叠展示，FIFO≤20，仅本端
  */
 import { getNoteById, getConceptCatalog } from './data.js';
 import { renderNoteDetailInto } from './note-detail.js';
@@ -58,6 +59,22 @@ function attachImageDiagnostics(container) {
   });
 }
 
+/** 📜 简要年表（需求 20260922 C）：本端内容类事件账本（create/edit/concepts/import），FIFO≤20；详情页底部折叠展示 */
+function renderHistoryBlock(note) {
+  const list = Array.isArray(note.history) ? note.history.slice() : [];
+  if (!list.length) return;
+  const LABEL = { create: '🆕 创建', edit: '✏️ 编辑', concepts: '🏷 概念标签', import: '⇄ 导入覆盖' };
+  const rows = list.slice().reverse().map((e) => {
+    const d = new Date(Number(e.t));
+    const time = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return `<li><span class="muted">${esc(time)}</span> ${esc(LABEL[e.k] || e.k)}${e.d ? ` · ${esc(e.d)}` : ''}</li>`;
+  }).join('');
+  const wrap = document.createElement('details');
+  wrap.className = 'note-history';
+  wrap.innerHTML = `<summary>📜 简要年表（${list.length} 条，仅本端）</summary><ul class="note-history-list">${rows || '<li>（空）</li>'}</ul>`;
+  $('note-card').appendChild(wrap);
+}
+
 async function load() {
   const id = new URLSearchParams(location.search).get('id');
   if (!id) {
@@ -93,6 +110,7 @@ async function load() {
   await renderNoteDetailInto(body, note, catalogById);
   try { await typesetInto(body); } catch (e) { /* 公式排版失败不阻断 */ }
   attachImageDiagnostics(body);
+  renderHistoryBlock(note);   // 📜 简要年表（需求 20260922 C）
 
   $('edit-btn').addEventListener('click', () => {
     location.href = `type.html?t=${encodeURIComponent(note.type || 'note')}&edit=${encodeURIComponent(note.id)}`;
