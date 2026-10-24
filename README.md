@@ -4,7 +4,7 @@
 > （手机/平板浏览器打开 → 菜单「添加到主屏幕」→ 像 App 一样使用）
 
 一个**纯本地**的读书笔记应用：没有服务器、没有云端、没有账号。你的笔记只存在两处——
-你自己的设备（浏览器本地存储）和你自己的电脑（Markdown 文件，可选）。
+你自己的设备（浏览器本地存储）和你自己的电脑（CLI 管理的 JSON sidecar / 源文档，可选）。
 「添加到主屏幕」后离线可用。
 
 ---
@@ -22,10 +22,11 @@
 | 位置 | 内容 |
 |------|------|
 | 浏览器本地（IndexedDB） | 你导入/撰写的全部笔记、图片、概念标签 |
-| 你的电脑（可选） | Markdown 笔记文件（CLI 管理，更完整的真相源） |
+| 你的电脑（可选） | JSON sidecar 为编辑真源；md/html/txt/docx 等源文档只读保留 |
 | 服务器 | **无**。本站是纯静态页面，任何数据都不上传 |
 
 - 换手机/换浏览器 = 新的空库，用「⬇ 备份 / 迁移包」导出 JSON 带走（可勾选含图片）。
+- 电脑端 CLI 可导入 md/html/txt/docx，并为每篇文档生成 `源文件名.note.json` 管理记录。
 - 清除浏览器数据会清空本地库——**定期导出备份**。
 - 多终端之间**不自动同步**：靠「导出 → 传输（微信/网盘/AirDrop）→ 导入」显式搬运，这是刻意的 local-first 设计。
 
@@ -39,7 +40,7 @@
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "exportedAt": "2026-09-17T12:00:00.000Z",
   "notes": [ "…记录数组…" ],
   "books": [],
@@ -66,12 +67,17 @@
 | `updatedAt` | 建议 | 毫秒时间戳 | **合并的版本依据**：导入时包内较新者覆盖内容。不填则用包的 `exportedAt` 兜底 |
 | `readerNote` / `aiNote` / `quotes` / `characters` / `extension` | 否 | 可选 | 读者注 / AI 注 / 金句 / 人物 / 延伸阅读 |
 | `images` | 否 | 字符串数组 | 图片相对路径（配合 `imageFiles` 随包携带） |
+| `contentFormat` | 否 | 字符串 | `markdown`（默认）/ `html` / `text`；决定正文渲染器 |
+| `source` | 否 | 对象 | 来源元数据：`kind/path/originalName/sha256/importedAt/importedFrom` 等 |
+| `media` | 否 | 数组 | 图片非破坏式版式：`{src,widthPercent,rotate,align,caption}` |
+| `style` | 否 | 对象 | 文档级字体/对齐/行距白名单 |
+| `pinned` | 否 | 布尔 | 本端置顶偏好 |
 
 ### 最小可导入示例（复制即可用）
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "exportedAt": "2026-09-17T12:00:00.000Z",
   "notes": [
     {
@@ -129,12 +135,44 @@
 - 🕸️ 知识图谱（概念 → 笔记可视化，本机可重算）＋ 🧭 概念管理（增删改、未编目概念一键收集）
 - 🏷️ 自由标签整理（重命名/删除/合并）
 - 📷 拍照/选图插入（自动压缩，随迁移包跨设备携带）
+- 🖼️ 图片非破坏式版式：旋转 90°/宽度/对齐/说明，原图不改
 - ✏️ 富文本编辑 + 公式（MathJax 离线渲染）、`==高亮==`/`~~删除线~~`/表格
+- 📄 多格式笔记：导入/编辑 md/html/txt；HTML 使用 sandbox 安全预览；DOCX/DOC 由电脑 CLI 转换
+- 🅰️ 文档级字体/对齐/行距白名单，PWA 与 PDF 同口径
 - 🔠 阅读字号四档（存本机）＋ 📖 书页模式（双页翻页）
+- 🗂️ 类型注册表 JSON 导入/导出，可与电脑 CLI 双向同步
 - 🖨 导出/生成：打印草稿（另存 PDF）/ 下载书稿 markdown
 - 📴 离线可用（Service Worker 缓存；页脚显示缓存版本号）
 
 ---
+
+## 六、多格式与类型同步（可选进阶）
+
+### 多格式笔记
+
+- 数据中枢「📥 导入文件」支持 JSON 笔记包与 `.md/.html/.txt`；
+- 导入后统一存为 JSON 记录，原文件不被 App 回写；
+- HTML 正文在 sandbox iframe 中阅读/预览，打印时使用白名单清洗；
+- DOCX/DOC 不内置 Office 转换器：电脑端运行
+  `reading-notes note import-file 文件.docx --project 资料` 转换后，再把 JSON 同步到 PWA。
+
+### 类型 JSON 双向同步
+
+- PWA：「⚙️ 数据 → 管理类型」→「⬇ 导出类型 JSON」/「📥 导入类型 JSON」；
+- CLI：
+
+```bash
+reading-notes type export -o note-types.json
+reading-notes type import note-types.json
+```
+
+契约：
+
+```json
+{ "schemaVersion": 1, "types": [
+  { "key": "idea", "label": "灵感", "icon": "💡", "fields": ["book"] }
+] }
+```
 
 ## 六、自部署（GitHub Pages）
 
@@ -158,6 +196,8 @@
 - **清除浏览器数据会怎样？** 本地库清空。请先「⬇ 备份 / 迁移包」导出。
 - **两台设备怎么保持一致？** 定期互导；智能合并会按 `updatedAt` 取新内容，并保留各端自己的文件夹/标签管理。
 - **支持其他语言？** 界面为中文；笔记内容任意语言均可。
+- **我的 Markdown 原文件会被修改吗？** 不会。App 编辑写 JSON，原 md/html/txt 源文件只读；手工修改源文件后需显式重新导入。
+- **图片旋转会改原图吗？** 不会。只保存显示属性；PDF 导出时使用临时旋转图。
 - **图标**：「添加到主屏幕」暂用默认图标。
 
 ## License

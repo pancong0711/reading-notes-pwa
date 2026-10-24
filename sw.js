@@ -9,7 +9,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v38';   // v38: 20260922 时间戳语义修复 + 列表排序三键/⭐置顶 + 📜笔记简要年表
+var CACHE_NAME = 'reading-notes-v42';   // v42: 20261024 类型注册表双向 JSON + 结构化 JSON 错误 + HTML 清洗 fixture + PDF 物理旋转
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [
@@ -49,6 +49,10 @@ var CORE_ASSETS = [
   './note-detail.js',   // v14：笔记详情共享渲染（markdown/图片可达）
   './print-export.js',   // v15：导出/生成打印草稿与书稿（范围过滤/打印 HTML 纯函数）
   './md-toolbar.js',   // v16：富文本工具栏纯函数（插入 markdown 语法/预览）
+  './html-doc.js',   // v39：HTML 笔记 sandbox 安全预览
+  './source-import.js',   // v39：md/html/txt 统一 JSON 导入解析
+  './media-util.js',   // v40：图片非破坏性版式纯函数（width/rotate/align）
+  './doc-style.js',   // v41：文档级样式白名单（字体/对齐/行距）
   './vendor/mathjax3/mathjax-boot.js',   // v16：公式启动与定点排版辅助
   './vendor/mathjax3/tex-svg.js',   // v16：MathJax v3 离线组件（2.1MB 单文件，SW 预缓存后离线可用）
   './vendor/markdown-lite.js',   // v14：本地 markdown 受控渲染器（无外链）

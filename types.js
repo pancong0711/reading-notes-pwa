@@ -125,6 +125,39 @@
     return FIELD_META[key] || { label: key, type: 'text', placeholder: '' };
   }
 
+  /** 导出自定义类型（与 CLI `type export` / `type import` 同一 JSON 契约）。 */
+  function exportTypes() {
+    return {
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      types: loadCustom().map(function (t) {
+        return {
+          key: t.key, label: t.label, icon: t.icon || '📝',
+          fields: Array.isArray(t.fields) ? t.fields : [], builtin: false,
+        };
+      }),
+    };
+  }
+
+  /** 合并导入自定义类型；同 key 覆盖，内置 key 忽略。 */
+  function importTypes(payload) {
+    var items = payload && Array.isArray(payload.types) ? payload.types : payload;
+    if (!Array.isArray(items)) throw new Error('类型 JSON 需为 {types:[…]} 或数组');
+    var list = loadCustom();
+    var changed = 0;
+    items.forEach(function (item) {
+      if (!item || typeof item !== 'object') return;
+      var key = String(item.key || '').trim().toLowerCase();
+      if (!validKey(key) || ['note','diary','log','memo','all'].includes(key)) return;   // 内置不可覆盖
+      var nt = normalizeCustom(item);
+      var idx = list.findIndex(function (t) { return t.key === key; });
+      if (idx >= 0) list[idx] = nt; else list.push(nt);
+      changed++;
+    });
+    saveCustom(list);
+    return changed;
+  }
+
   /* ── 导航渲染：所有页面共用（首页 + 每个类型一个入口） ── */
   function renderNav(activeKey) {
     var parts = [
@@ -146,6 +179,8 @@
     updateType: updateType,
     removeType: removeType,
     fieldMeta: fieldMeta,
+    exportTypes: exportTypes,
+    importTypes: importTypes,
     renderNav: renderNav,
   };
 })();

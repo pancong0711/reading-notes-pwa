@@ -10,8 +10,9 @@
  */
 import {
   getAllNotes, getAllBooks, getConceptCatalog, exportNotePackage, summarizePackage,
-  diffNotePackage, mergeNotePackage, getAllTags, renameTag, deleteTag,
+  diffNotePackage, mergeNotePackage, getAllTags, renameTag, deleteTag, addNote,
 } from './data.js';
+import { buildImportedNote, isImportableSource, hashSourceText, hasRelativeHtmlImages } from './source-import.js';
 import {
   filterNotesByScope, scopeLabel, buildPrintHtml, buildMarkdownDraft,
 } from './print-export.js';
@@ -46,6 +47,12 @@ const PANELS_HTML = `
         <button class="btn primary" type="submit">添加</button>
         <button class="btn ghost" id="type-manage-close" type="button">关闭</button>
       </form>
+      <div class="editor-actions">
+        <button class="btn ghost" id="type-export-json" type="button">⬇ 导出类型 JSON</button>
+        <button class="btn ghost" id="type-import-json" type="button">📥 导入类型 JSON</button>
+        <span class="muted">与 CLI <code>type export/import</code> 同一契约</span>
+      </div>
+      <input id="type-import-file" type="file" accept=".json,application/json" hidden>
     </div>
 
     <!-- 备份 / 迁移包面板（范围 + 含图片；纯 PWA 互传 / 回传电脑 / 备份） -->
@@ -124,7 +131,7 @@ const PANELS_HTML = `
     <!-- 数据中枢（⚙️ 数据）：聚合数据管理入口（20260911 回归修复） -->
     <div id="data-hub" class="type-manage" hidden>
       <h2>⚙️ 数据</h2>
-      <p class="muted">导入 / 备份 / 导出与整理入口集中在此；个人数据只在本机与你的设备间流转。</p>
+      <p class="muted">导入 / 备份 / 导出与整理入口集中在此；个人数据只在本机与你的设备间流转。<br>「📥 导入文件」支持 JSON 笔记包与 md/html/txt 文档；多格式文档导入后以 JSON 记录管理，原文件不会被修改。DOCX/DOC 请在电脑端用 CLI <code>note import-file</code> 转换后同步（PWA 不内置 Office 转换器）。</p>
       <div class="data-hub-actions">
         <button class="btn primary" id="data-sync" type="button">⇄ 从服务器导入</button>
         <button class="btn ghost" id="data-import" type="button">📥 导入文件</button>
@@ -133,13 +140,17 @@ const PANELS_HTML = `
         <button class="btn ghost" id="data-types" type="button">🗂 管理类型</button>
         <button class="btn ghost" id="data-tags" type="button">🏷 整理标签</button>
       </div>
+      <label class="field">多格式文档导入到文件夹
+        <input id="import-project" type="text" placeholder="other（可输入 父/子 层级）">
+        <span class="field-hint">仅对 md/html/txt 文件导入生效；JSON 包沿用包内 project。</span>
+      </label>
       <p class="muted" id="data-hub-status"></p>
       <div class="editor-actions">
         <button class="btn ghost" id="data-close" type="button">关闭</button>
       </div>
     </div>
 
-    <input type="file" id="import-file" accept=".json,application/json" hidden>
+    <input type="file" id="import-file" accept=".json,.md,.markdown,.html,.htm,.txt,.docx,.doc,application/json,text/markdown,text/html,text/plain" multiple hidden>
 `;
 
 const FIELD_KEYS = ['book', 'pages', 'done', 'due'];
@@ -313,15 +324,65 @@ async function syncFromCli() {
   await openImportDialog(pkg, '从电脑导入');
 }
 
-async function doImport(file) {
-  try {
-    const json = JSON.parse(await file.text());
-    const list = Array.isArray(json) ? json : (json && Array.isArray(json.notes) ? json.notes : []);
-    if (!list.length) throw new Error('导入包为空');
-    await openImportDialog(json, '导入文件');
-  } catch (e) {
-    toast(`导入失败：${e.message}`);
+async function doImport(fileOrFiles) {
+  const files = Array.isArray(fileOrFiles) ? fileOrFiles
+    : (fileOrFiles && typeof fileOrFiles.length === 'number' ? [...fileOrFiles] : [fileOrFiles]);
+  const all = files.filter(Boolean);
+  if (!all.length) return;
+  // JSON 包：沿用差异对比/合并流程（一次处理一个包）
+  const jsonFile = all.find((f) => /\.json$/i.test(f.name || ''));
+  if (jsonFile) {
+    if (all.length > 1) {
+      toast('请勿同时选择 JSON 笔记包与 md/html/txt 文档，请分两次导入', 5200);
+      return;
+    }
+    try {
+      const json = JSON.parse(await jsonFile.text());
+      const list = Array.isArray(json) ? json : (json && Array.isArray(json.notes) ? json.notes : []);
+      if (!list.length) throw new Error('导入包为空');
+      await openImportDialog(json, '导入文件');
+    } catch (e) {
+      toast(`导入失败：${e.message}`, 4200);
+    }
+    return;
   }
+  // md/html/txt：直接生成统一 JSON 记录；原文件只读，不保存路径依赖
+  let imported = 0;
+  let skipped = 0;
+  const warnings = [];
+  let existing = [];
+  try { existing = await getAllNotes(); } catch (e) { existing = []; }
+  const knownHashes = new Set(existing.map((n) => n && n.source && n.source.sha256).filter(Boolean));
+  const project = ($('import-project')?.value || '').trim() || (host.getImportProject && host.getImportProject()) || 'other';
+  for (const f of all) {
+    if (/\.(docx?|doc)$/i.test(f.name || '')) {
+      warnings.push(`${f.name}: DOCX/DOC 需先在电脑端用 CLI note import-file 转换，再同步 JSON`);
+      skipped++;
+      continue;
+    }
+    if (!isImportableSource(f.name)) { skipped++; continue; }
+    try {
+      const text = await f.text();
+      const note = buildImportedNote({ filename: f.name, text, project, type: 'note' });
+      if (note.contentFormat === 'html' && hasRelativeHtmlImages(text)) {
+        warnings.push(`${f.name}: HTML 相对图片未自动导入，请在电脑端用 CLI 导入以复制图片`);
+      }
+      const sha = await hashSourceText(text);
+      if (knownHashes.has(sha)) { skipped++; continue; }
+      note.source.sha256 = sha;
+      note.source.size = new Blob([text]).size;
+      note.source.encoding = 'utf-8';
+      await addNote(note);
+      knownHashes.add(sha);
+      imported++;
+    } catch (e) {
+      warnings.push(`${f.name}: ${e.message}`);
+      skipped++;
+    }
+  }
+  await host.onChange?.();
+  const extra = warnings.length ? `；${warnings.slice(0, 2).join('；')}` : '';
+  toast(`已导入 ${imported} 篇多格式文档${skipped ? `，跳过 ${skipped}` : ''}${extra}`, 5200);
 }
 
 /** 确认导入：备份 → 按所选策略应用 → 刷新 */
@@ -554,7 +615,7 @@ function bind() {
   on('tag-manage-close', () => { backToHub(); });
   const fileEl = $('import-file');
   if (fileEl) fileEl.addEventListener('change', () => {
-    if (fileEl.files[0]) doImport(fileEl.files[0]);
+    if (fileEl.files && fileEl.files.length) doImport([...fileEl.files]);
     fileEl.value = '';
   });
   ['backup-book', 'backup-type', 'backup-from', 'backup-to'].forEach((id) => {
@@ -587,6 +648,38 @@ function bind() {
     renderTypeManager();
     host.onTypesChanged?.();
   });
+  // 类型 JSON 双向同步（CLI ⇄ PWA）
+  const typeExportBtn = $('type-export-json');
+  if (typeExportBtn) typeExportBtn.addEventListener('click', () => {
+    try {
+      const payload = NoteTypes.exportTypes();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `note-types-${todayStr().replace(/-/g, '')}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast(`已导出 ${payload.types.length} 个自定义类型`);
+    } catch (err) { toast(`导出类型失败：${err.message}`, 4200); }
+  });
+  const typeImportBtn = $('type-import-json');
+  const typeImportFile = $('type-import-file');
+  if (typeImportBtn && typeImportFile) {
+    typeImportBtn.addEventListener('click', () => typeImportFile.click());
+    typeImportFile.addEventListener('change', async () => {
+      const f = typeImportFile.files && typeImportFile.files[0];
+      if (!f) return;
+      try {
+        const data = JSON.parse(await f.text());
+        const n = NoteTypes.importTypes(data);
+        renderTypeManager();
+        host.onTypesChanged?.();
+        toast(`已导入/更新 ${n} 个自定义类型`);
+      } catch (err) { toast(`导入类型失败：${err.message}`, 4200); }
+      typeImportFile.value = '';
+    });
+  }
+
   // 标签整理：重命名/合并、删除（20260911 迁入）
   const tagListEl = $('tag-list');
   if (tagListEl) tagListEl.addEventListener('click', async (e) => {

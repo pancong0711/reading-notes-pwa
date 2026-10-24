@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>记录 · 读书笔记</title>
-  <link rel="stylesheet" href="styles.css?v=20260905e">
+  <link rel="stylesheet" href="styles.css?v=20261024c">
   <script src="reading-font.js"></script>
   <style>
     /* 导出/生成面板（范围选择行 + 操作按钮） */
@@ -98,6 +98,37 @@
         <datalist id="project-list"></datalist>
       </label>
 
+      <div class="field" id="media-editor-field" hidden>
+        <span>图片版式（非破坏性：原图不变）</span>
+        <div id="media-editor" class="media-editor"></div>
+        <p class="field-hint">旋转/宽度/对齐仅保存为 JSON 显示属性；导出 Markdown 时写入图片属性后缀。</p>
+      </div>
+
+      <label class="field">正文格式
+        <select id="f-format">
+          <option value="markdown">Markdown（推荐）</option>
+          <option value="html">HTML（沙箱预览/源码编辑）</option>
+          <option value="text">纯文本</option>
+        </select>
+        <span class="field-hint">导入的 md/html/txt 会以 JSON 记录管理；编辑不会修改原文件。</span>
+      </label>
+
+      <div class="field">
+        <span>正文样式（文档级白名单）</span>
+        <div class="doc-style-controls">
+          <label>字体 <select id="f-font"></select></label>
+          <label>对齐 <select id="f-align">
+            <option value="left">左</option><option value="center">居中</option>
+            <option value="right">右</option><option value="justify">两端</option>
+          </select></label>
+          <label>行距 <select id="f-line-height">
+            <option value="compact">紧凑</option><option value="normal">标准</option>
+            <option value="loose">宽松</option>
+          </select></label>
+        </div>
+        <span class="field-hint">只允许白名单字体/对齐/行距，PWA 与 PDF 同口径。</span>
+      </div>
+
       <label class="field">内容
         <div class="md-editor">
           <div class="md-toolbar" id="md-toolbar" role="toolbar" aria-label="文本格式"></div>
@@ -144,6 +175,6 @@
   <script src="sw-register.js"></script>
   <script src="panel-modal.js"></script>
   <script src="types.js"></script>
-  <script type="module" src="type.js?v=20260905d"></script>
+  <script type="module" src="type.js?v=20261024c"></script>
 </body>
 </html>

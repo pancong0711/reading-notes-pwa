@@ -106,7 +106,7 @@ function buildPrintItem(n, catalogById) {
   return `<article class="print-note">
   <h2>${esc(n.title || '未命名')}</h2>
   <p class="print-meta">${meta.map((m) => esc(m)).join(' ｜ ')}</p>
-  <div class="note-detail">${renderNoteDetail(n, catalogById)}</div>
+  <div class="note-detail">${renderNoteDetail(n, catalogById, { forPrint: true })}</div>
 </article>`;
 }
 
@@ -126,6 +126,13 @@ const PRINT_CSS = `
   .print-meta { font-size: 9pt; color: #888; margin: 0 0 10px; }
   .note-detail h4 { font-size: 10pt; color: #c9a96e; margin: 12px 0 4px; }
   .note-detail img.note-detail-img { max-width: 100%; height: auto; margin: 6px 0; }
+  .note-detail figure.note-media { display: block; margin: 10px 0 14px; page-break-inside: avoid; }
+  .note-detail .note-html-print { width: 100%; overflow-wrap: anywhere; }
+  .note-detail .note-html-print img { max-width: 100%; height: auto; }
+  .note-detail .note-html-print table { border-collapse: collapse; width: 100%; }
+  .note-detail .note-html-print th, .note-detail .note-html-print td { border: 1px solid #ddd; padding: 4px 8px; }
+  .note-detail figure.note-media img.note-media-img { display: inline-block; max-width: 100%; height: auto; transform-origin: center center; }
+  .note-detail .note-media .img-caption { font-size: 9pt; color: #888; text-align: center; margin-top: 4px; }
   .note-tags .tag { display: inline-block; font-size: 9pt; color: #b8860b;
                     border: 1px solid #e6d9b8; border-radius: 10px; padding: 1px 8px;
                     margin: 0 4px 4px 0; }

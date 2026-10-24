@@ -201,7 +201,16 @@ function normalizeNote(raw, index, ctx) {
     tags: normalizeTags(raw.tags),
     rating: raw.rating == null ? null : Number(raw.rating),
     pages: raw.pages || '',
+    // 统一 JSON 笔记（需求 20261024）：正文格式/来源/媒体/样式。
+    // 旧记录缺省视为 markdown + native，不影响兼容。
+    contentFormat: ['markdown', 'html', 'text'].includes(raw.contentFormat)
+      ? raw.contentFormat : 'markdown',
     content: raw.content || '',
+    source: raw.source && typeof raw.source === 'object' ? raw.source : {},
+    media: Array.isArray(raw.media)
+      ? raw.media.filter((m) => m && typeof m === 'object')
+      : [],
+    style: raw.style && typeof raw.style === 'object' ? raw.style : {},
     images: Array.isArray(raw.images)
       ? raw.images.filter((i) => typeof i === 'string')
       : [],
@@ -1482,11 +1491,19 @@ export async function collectImageFiles(notes, fetcher) {
   const f = fetcher || (typeof fetch === 'function' ? fetch : null);
   const paths = [];
   const seen = new Set();
+  const addPath = (v) => {
+    const p = String(v || '').trim();
+    if (!p || p.startsWith('data:') || p.startsWith('http://') || p.startsWith('https://')) return;
+    if (!seen.has(p)) { seen.add(p); paths.push(p); }
+  };
   for (const n of notes || []) {
-    for (const img of Array.isArray(n.images) ? n.images : []) {
-      const p = String(img);
-      if (p && !seen.has(p)) { seen.add(p); paths.push(p); }
+    for (const img of Array.isArray(n.images) ? n.images : []) addPath(img);
+    for (const m of Array.isArray(n.media) ? n.media : []) {
+      if (m && typeof m === 'object') addPath(m.src === 'imageData' ? '' : m.src);
     }
+    const content = String(n.content || '');
+    for (const m of content.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) addPath(m[1]);
+    for (const m of content.matchAll(/<img\b[^>]*?\bsrc=["']([^"']+)["']/gi)) addPath(m[1]);
   }
   const imageFiles = {};
   const missing = [];

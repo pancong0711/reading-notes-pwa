@@ -20,6 +20,8 @@
  * 纯函数、无 DOM 依赖：浏览器（ES module）与 node 测试均可加载。
  */
 
+import { renderMediaFigure, parseImageAttrs } from '../media-util.js';
+
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
 function escapeHtml(s) {
@@ -61,10 +63,11 @@ function inline(text) {
   out = out.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
 
   // 图片与链接（按顺序先图片）
-  out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, alt, src) => {
+  // 图片可选 Pandoc 风格属性：![alt](src){width=80% rotate=90 align=center}
+  out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)(?:\{([^}]*)\})?/g, (m, alt, src, attrs) => {
     const u = safeUrl(src, true);
     if (!u) return `[${alt}](${src})`;
-    return `<img src="${escAttr(u)}" alt="${escapeHtml(alt)}" loading="lazy">`;
+    return renderMediaFigure(u, { src: u, alt, ...parseImageAttrs(attrs) });
   });
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, t, href) => {
     const u = safeUrl(href, false);

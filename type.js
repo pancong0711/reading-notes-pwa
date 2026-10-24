@@ -29,6 +29,9 @@ import { filterNotesByScope, buildPrintHtml, buildMarkdownDraft, scopeLabel } fr
 import { BUTTONS, wrapSelection, renderPreview } from './md-toolbar.js';
 import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
 import { mountDataActions } from './data-actions.js';
+import { renderHtmlPreviewInto } from './html-doc.js';
+import { mediaFromMarkdown, mergeMediaLists, normalizeMediaItem, applyMediaAttrsToMarkdown } from './media-util.js';
+import { normalizeDocStyle, styleToCss, FONT_OPTIONS } from './doc-style.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -59,6 +62,12 @@ const els = {
   fTags: $('f-tags'),
   fTitle: $('f-title'),
   fContent: $('f-content'),
+  fFormat: $('f-format'),
+  mediaEditorField: $('media-editor-field'),
+  mediaEditor: $('media-editor'),
+  fFont: $('f-font'),
+  fAlign: $('f-align'),
+  fLineHeight: $('f-line-height'),
   fProject: $('f-project'),
   projectList: $('project-list'),
   tagHistory: $('tag-history'),
@@ -84,6 +93,9 @@ const els = {
 let currentType = null;      // 当前记录类型（NoteTypes 条目）
 let editingId = null;        // 正在编辑的记录 id（null = 新建）
 let photoData = '';          // 压缩 base64
+let editorFormat = 'markdown'; // 当前正文格式（markdown|html|text）
+let editorMedia = [];           // 非破坏性图片版式状态
+let docStyle = normalizeDocStyle({});  // 文档级样式白名单
 let notesCache = [];         // 当前类型列表缓存
 let searchQuery = '';        // 搜索框当前关键词（空 = 显示全量）
 let listFilters = { project: '', book: '', dateFrom: '', dateTo: '', tag: '', concept: '' };  // 筛选栏状态（与搜索 AND 叠加；tag/concept 来自详情页 chips 入口）
@@ -402,12 +414,20 @@ function openEditor(rec) {
   const eff = effType || NoteTypes.getType('note');
   fillTypeOptions(eff.key);   // 类型选择器（20260911 ⑦：新建必选/编辑可改）
   photoData = rec?.imageData || '';
+  editorFormat = rec?.contentFormat || 'markdown';
+  if (els.fFormat) els.fFormat.value = editorFormat;
+  docStyle = normalizeDocStyle(rec?.style || {});
+  if (els.fFont) els.fFont.value = docStyle.font;
+  if (els.fAlign) els.fAlign.value = docStyle.align;
+  if (els.fLineHeight) els.fLineHeight.value = docStyle.lineHeight;
+  syncFormatUi();
   const verb = rec ? '编辑' : '写';
   els.editorTitle.textContent = `${verb}${eff.label}`;
   els.fDate.value = rec?.date || todayStr();
   els.fTitle.value = rec?.title || '';
   els.fTags.value = (rec?.tags || []).join(', ');
   els.fContent.value = rec?.content || '';
+  initEditorMedia(rec);
   els.fProject.value = rec?.project || new URLSearchParams(location.search).get('project') || '';
   els.mdPreview.hidden = true;
   els.fReader.value = rec?.readerNote || '';
@@ -433,6 +453,8 @@ function closeEditor() {
   els.photoPreview.hidden = true;
   els.fTags.value = '';
   els.mdPreview.hidden = true;
+  editorMedia = [];
+  renderMediaEditor();
   selectedConcepts = new Map();
 }
 
@@ -449,11 +471,17 @@ async function saveRecord() {
     date,
     tags: parseTagsInput(els.fTags.value),
     concepts: [...selectedConcepts.entries()].map(([id, source]) => ({ id, source: source || 'user' })),
-    content: els.fContent.value.trim(),
+    content: (els.fFormat?.value || editorFormat) === 'markdown'
+      ? applyMediaAttrsToMarkdown(els.fContent.value.trim(), editorMedia)
+      : els.fContent.value.trim(),
+    contentFormat: els.fFormat?.value || editorFormat || 'markdown',
+    media: editorMedia,
+    style: docStyle,
     project: els.fProject.value.trim(),
     readerNote: els.fReader.value.trim(),
     aiNote: els.fAi.value.trim(),
     imageData: photoData,
+    updatedAt: Date.now(),                     // 内容编辑必须推进时钟（多端合并/排序依赖）
     ...collectTypeFields(existing, effType),    // book/pages/meta 按类型字段覆盖
   };
   await addNote(rec);
@@ -523,6 +551,104 @@ function selectedTypeDef() {
 
 /* ── 富文本工具栏 / 预览（A1：md-toolbar 纯函数驱动）────────────── */
 
+/** 初始化图片版式：合并 note.media、images 列表、imageData 与正文内联图片。 */
+function initEditorMedia(rec) {
+  const noteMedia = mergeMediaLists(
+    rec?.media,
+    (rec?.images || []).map((src, i) => normalizeMediaItem({ src, id: `img_${i + 1}` }, i)),
+    rec?.imageData ? [normalizeMediaItem({ id: 'imageData', src: 'imageData', alt: '照片' }, 0)] : [],
+  );
+  editorMedia = mergeMediaLists(noteMedia, mediaFromMarkdown(rec?.content || ''));
+  renderMediaEditor();
+}
+
+function mediaPreviewSrc(m) {
+  if (!m) return '';
+  if (m.id === 'imageData') return photoData || '';
+  return m.src || '';
+}
+
+function renderMediaEditor() {
+  if (!els.mediaEditor || !els.mediaEditorField) return;
+  const visible = editorMedia.filter((m) => mediaPreviewSrc(m));
+  els.mediaEditorField.hidden = !visible.length;
+  els.mediaEditor.innerHTML = visible.map((m, i) => {
+    const idx = editorMedia.indexOf(m);
+    const src = mediaPreviewSrc(m);
+    return `<div class="media-row" data-media-idx="${idx}">
+      <img class="media-thumb" src="${esc(src)}" alt="${esc(m.alt || '笔记图片')}">
+      <div class="media-meta">
+        <div class="media-name">${esc(m.alt || `图片 ${i + 1}`)}</div>
+        <div class="media-controls">
+          <button type="button" class="btn ghost small" data-media-act="rotate-left" title="向左旋转 90°">⟲</button>
+          <button type="button" class="btn ghost small" data-media-act="rotate-right" title="向右旋转 90°">⟳</button>
+          <label>宽度 <select data-media-field="width">
+            ${[25, 50, 75, 100].map((w) => `<option value="${w}"${m.widthPercent === w ? ' selected' : ''}>${w}%</option>`).join('')}
+          </select></label>
+          <label>对齐 <select data-media-field="align">
+            ${[['left','左'],['center','中'],['right','右']].map(([v,l]) => `<option value="${v}"${m.align === v ? ' selected' : ''}>${l}</option>`).join('')}
+          </select></label>
+          <button type="button" class="btn ghost small" data-media-act="reset">重置</button>
+        </div>
+        <input class="media-caption" data-media-field="caption" value="${esc(m.caption || '')}" placeholder="图片说明（可选）">
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function onMediaEditorEvent(e) {
+  const row = e.target.closest('[data-media-idx]');
+  if (!row) return;
+  const idx = Number(row.getAttribute('data-media-idx'));
+  const m = editorMedia[idx];
+  if (!m) return;
+  const act = e.target.getAttribute('data-media-act');
+  if (act === 'rotate-left') m.rotate = ((Number(m.rotate || 0) + 270) % 360);
+  else if (act === 'rotate-right') m.rotate = ((Number(m.rotate || 0) + 90) % 360);
+  else if (act === 'reset') { m.rotate = 0; m.widthPercent = 100; m.align = 'center'; m.caption = ''; }
+  else {
+    const field = e.target.getAttribute('data-media-field');
+    if (!field) return;
+    if (field === 'width') m.widthPercent = Number(e.target.value) || 100;
+    else if (field === 'align') m.align = e.target.value || 'center';
+    else if (field === 'caption') m.caption = e.target.value || '';
+  }
+  renderMediaEditor();
+}
+
+/** 初始化文档级字体白名单下拉。 */
+function initDocStyleOptions() {
+  if (els.fFont) {
+    els.fFont.innerHTML = FONT_OPTIONS.map((f) => `<option value="${f.value}">${f.label}</option>`).join('');
+    els.fFont.value = docStyle.font;
+  }
+}
+
+/** 从控件读取文档级样式（白名单规整）。 */
+function readDocStyle() {
+  docStyle = normalizeDocStyle({
+    font: els.fFont?.value,
+    align: els.fAlign?.value,
+    lineHeight: els.fLineHeight?.value,
+  });
+  return docStyle;
+}
+
+/** 按正文格式切换工具栏/占位文案；HTML/TXT 仍用 textarea 源码编辑，预览分格式渲染。 */
+function syncFormatUi() {
+  editorFormat = els.fFormat?.value || editorFormat || 'markdown';
+  const isMd = editorFormat === 'markdown';
+  if (els.mdToolbar) els.mdToolbar.hidden = !isMd;
+  if (els.fContent) {
+    els.fContent.placeholder = isMd
+      ? '写下内容……（支持 **粗体**、*斜体*、==高亮==、公式 $E=mc^2$、$$…$$ 等）'
+      : editorFormat === 'html'
+        ? '编辑 HTML 源码；保存进 JSON，不会修改原文件。HTML 预览在 sandbox iframe 中运行。'
+        : '输入纯文本；保存进 JSON，换行与空白会保留。';
+  }
+  if (els.mdPreview) els.mdPreview.hidden = true;
+}
+
 function renderMdToolbar() {
   els.mdToolbar.innerHTML = BUTTONS.map((b) =>
     `<button type="button" data-md="${esc(b.key)}" title="${esc(b.title)}">${esc(b.label)}</button>`).join('');
@@ -538,11 +664,25 @@ function onMdBtn(key) {
   t.setSelectionRange(r.selStart, r.selEnd);
 }
 
+function renderPreviewContent() {
+  const text = els.fContent.value || '';
+  const css = styleToCss(docStyle);
+  if (els.mdPreview) els.mdPreview.style.cssText = css;
+  if (editorFormat === 'html') {
+    renderHtmlPreviewInto(els.mdPreview, text, { style: css });
+  } else if (editorFormat === 'text') {
+    els.mdPreview.innerHTML = `<pre class="note-text" style="${esc(css)}">${esc(text)}</pre>`;
+  } else {
+    els.mdPreview.innerHTML = renderPreview(text);
+  }
+}
+
 async function toggleMdPreview() {
   const show = els.mdPreview.hidden;
   els.mdPreview.hidden = !show;
-  if (show) {
-    els.mdPreview.innerHTML = renderPreview(els.fContent.value || '');
+  if (!show) return;
+  renderPreviewContent();
+  if (editorFormat === 'markdown') {
     try { await typesetInto(els.mdPreview); } catch (e) { /* 公式排版失败不阻断预览 */ }
   }
 }
@@ -558,6 +698,19 @@ if (els.fType) {
 els.mdToolbar.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-md]');
   if (btn) onMdBtn(btn.getAttribute('data-md'));
+});
+if (els.fFormat) els.fFormat.addEventListener('change', syncFormatUi);
+[els.fFont, els.fAlign, els.fLineHeight].forEach((el) => {
+  if (el) el.addEventListener('change', () => { readDocStyle(); if (!els.mdPreview.hidden) renderPreviewContent(); });
+});
+if (els.mediaEditor) els.mediaEditor.addEventListener('click', onMediaEditorEvent);
+if (els.mediaEditor) els.mediaEditor.addEventListener('change', onMediaEditorEvent);
+if (els.mediaEditor) els.mediaEditor.addEventListener('input', (e) => {
+  if (e.target.getAttribute('data-media-field') !== 'caption') return;
+  const row = e.target.closest('[data-media-idx]');
+  if (!row) return;
+  const m = editorMedia[Number(row.getAttribute('data-media-idx'))];
+  if (m) m.caption = e.target.value || '';   // 输入期间不重绘，避免光标/焦点丢失
 });
 els.mdPreviewToggle.addEventListener('click', toggleMdPreview);
 
@@ -681,6 +834,10 @@ els.photoInput.addEventListener('change', async () => {
     photoData = await compressImage(file);
     els.photoPreview.src = photoData;
     els.photoPreview.hidden = false;
+    if (!editorMedia.some((m) => m.id === 'imageData')) {
+      editorMedia.push(normalizeMediaItem({ id: 'imageData', src: 'imageData', alt: '照片' }, editorMedia.length));
+    }
+    renderMediaEditor();
     toast('照片已就绪');
   } catch (err) {
     toast(`照片处理失败：${err.message}`);
@@ -741,6 +898,7 @@ els.list.addEventListener('click', async (event) => {
   renderHeader();
   document.title = `${currentType.label} · 读书笔记`;
   renderMdToolbar();
+  initDocStyleOptions();
   // 数据管理入口（⚙️ 数据）：导入/备份/导出生成/类型/标签——共享模块（20260911 回归修复）
   mountDataActions({ onChange: refresh, getCurrentType: () => currentType });
   // F3 入口：?tag= / ?concept=（详情页 chips 跳转）→ 过滤状态 + 可清除 chips

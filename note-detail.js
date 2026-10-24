@@ -13,6 +13,9 @@
  */
 import { renderMarkdown } from './vendor/markdown-lite.js';
 import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
+import { renderHtmlFrame, sanitizeHtmlForPrint } from './html-doc.js';
+import { renderMediaFigure, mediaForSrc, normalizeMediaList } from './media-util.js';
+import { styleToCss } from './doc-style.js';
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -42,18 +45,34 @@ function conceptsHtml(concepts, catalogById) {
   return `<div class="note-sec"><h4>概念</h4><div class="note-tags">${chips}</div></div>`;
 }
 
-/** 图片项 → <a><img>：路径（CLI 已同步 app/pwa/assets）或 imageData（base64） */
-function imageHtml(src) {
+/** 图片项 → 非破坏性版式包装：媒体属性来自 note.media，原图不变。 */
+function imageHtml(src, media) {
   if (!src) return '';
   const s = String(src);
-  return `<a href="${esc(s)}" target="_blank" rel="noopener"><img class="note-detail-img" src="${esc(s)}" data-path="${esc(s)}" alt="笔记图片" loading="lazy"></a>`;
+  return renderMediaFigure(s, media || { src: s }, { href: s });
+}
+
+function baseName(p) {
+  const s = String(p || '').split(/[?#]/)[0].replace(/\\/g, '/');
+  return s.slice(s.lastIndexOf('/') + 1);
 }
 
 function imagesHtml(note) {
+  // 统一 JSON sidecar 的正文常已包含 ![](…) 图片链接；images 列表仅用于媒体同步/缺失诊断。
+  // 若同一图片已在正文出现，则不再重复渲染，避免“正文一张 + 原文图片又一张”。
+  const inlineNames = new Set();
+  if (note && typeof note.content === 'string') {
+    for (const m of note.content.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
+      inlineNames.add(baseName(m[1]));
+    }
+  }
+  const media = normalizeMediaList(note.media);
   const list = (Array.isArray(note.images) ? note.images : [])
-    .concat(note.imageData ? [note.imageData] : []);
+    .filter((src) => !inlineNames.has(baseName(src)))
+    .map((src) => ({ src, media: mediaForSrc(media, src) }))
+    .concat(note.imageData ? [{ src: note.imageData, media: mediaForSrc(media, 'imageData') || { src: note.imageData, id: 'imageData' } }] : []);
   if (!list.length) return '';
-  return section('原文图片', `<div class="note-images">${list.map(imageHtml).join('')}</div>`);
+  return section('原文图片', `<div class="note-images">${list.map((it) => imageHtml(it.src, it.media)).join('')}</div>`);
 }
 
 /**
@@ -62,7 +81,7 @@ function imagesHtml(note) {
  * @param {object} [catalogById]  概念 id → {name} 映射（缺省按 id 显示）
  * @returns {string} 详情 HTML 片段
  */
-export function renderNoteDetail(note, catalogById) {
+export function renderNoteDetail(note, catalogById, opts = {}) {
   const parts = [];
   if (note.pages) parts.push(`<div class="note-sec"><h4>页码</h4><p>${esc(note.pages)}</p></div>`);
   if (note.meta && note.meta.due) parts.push(`<div class="note-sec"><h4>截止</h4><p>${esc(note.meta.due)}</p></div>`);
@@ -70,9 +89,22 @@ export function renderNoteDetail(note, catalogById) {
   if (tags) parts.push(tags);
   const concepts = conceptsHtml(note.concepts, catalogById);
   if (concepts) parts.push(concepts);
-  if (note.content) parts.push(section('内容', `<div class="note-md">${renderMarkdown(note.content)}</div>`));
-  if (note.readerNote) parts.push(section('读者注', `<div class="note-md">${renderMarkdown(note.readerNote)}</div>`));
-  if (note.aiNote) parts.push(section('AI注', `<div class="note-md">${renderMarkdown(note.aiNote)}</div>`));
+  const docCss = styleToCss(note.style || {});
+  if (note.content) {
+    const fmt = note.contentFormat || 'markdown';
+    if (fmt === 'html') {
+      const htmlContent = opts.forPrint
+        ? `<div class="note-md note-html-print" style="${esc(docCss)}">${sanitizeHtmlForPrint(note.content)}</div>`
+        : `<div class="note-md note-html-body">${renderHtmlFrame(note.content, { style: docCss })}</div>`;
+      parts.push(section('内容', htmlContent));
+    } else if (fmt === 'text') {
+      parts.push(section('内容', `<pre class="note-text" style="${esc(docCss)}">${esc(note.content)}</pre>`));
+    } else {
+      parts.push(section('内容', `<div class="note-md" style="${esc(docCss)}">${renderMarkdown(note.content)}</div>`));
+    }
+  }
+  if (note.readerNote) parts.push(section('读者注', `<div class="note-md" style="${esc(docCss)}">${renderMarkdown(note.readerNote)}</div>`));
+  if (note.aiNote) parts.push(section('AI注', `<div class="note-md" style="${esc(docCss)}">${renderMarkdown(note.aiNote)}</div>`));
   const imgs = imagesHtml(note);
   if (imgs) parts.push(imgs);
   return parts.join('') || '<p class="muted">（无更多内容）</p>';

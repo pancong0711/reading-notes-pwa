@@ -882,6 +882,64 @@ main {
   font-size: 12px;
 }
 .note-md img { max-width: 100%; border-radius: 8px; margin: 6px 0; }
+/* 多格式笔记（20261024）：HTML 沙箱 iframe / 纯文本正文 */
+.note-html-frame {
+  display: block;
+  width: 100%;
+  min-height: 420px;
+  height: 68vh;
+  border: 1px solid var(--line, #e6dfd2);
+  border-radius: 10px;
+  background: #fff;
+  margin: 8px 0;
+}
+.note-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f6f1e7;
+  font-family: inherit;
+  font-size: 1em;
+  line-height: 1.75;
+}
+.note-html-body { width: 100%; }
+/* 图片非破坏性版式（20261024）：width/rotate/align 只影响显示，原图不变 */
+.note-media {
+  display: block;
+  margin: 10px 0 14px;
+  page-break-inside: avoid;
+}
+.note-media .note-media-img {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  transform-origin: center center;
+  transition: transform .18s ease;
+}
+.note-media .img-caption {
+  font-size: .82em;
+  color: var(--ink-soft, #6b6256);
+  margin-top: 4px;
+}
+/* 编辑器图片版式面板 */
+.media-editor { display: grid; gap: 10px; }
+.doc-style-controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.doc-style-controls label { font-size: .9em; color: var(--ink-soft, #6b6256); }
+.doc-style-controls select { font: inherit; padding: 4px 8px; border: 1px solid var(--line, #e6dfd2); border-radius: 6px; background: #fff; }
+.media-row { display: grid; grid-template-columns: 104px 1fr; gap: 12px; align-items: start;
+  border: 1px solid var(--line, #e6dfd2); border-radius: 10px; padding: 10px; background: #fffdf9; }
+.media-thumb { width: 104px; height: 84px; object-fit: contain; border-radius: 8px; background: #f6f1e7; }
+.media-meta { min-width: 0; }
+.media-name { font-size: .9em; color: var(--ink, #2f2a22); margin-bottom: 6px; overflow-wrap: anywhere; }
+.media-controls { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: .86em; }
+.media-controls select, .media-caption { font: inherit; padding: 3px 6px; border: 1px solid var(--line, #e6dfd2); border-radius: 6px; }
+.media-caption { width: 100%; margin-top: 7px; box-sizing: border-box; }
+@media (max-width: 520px) {
+  .media-row { grid-template-columns: 72px 1fr; }
+  .media-thumb { width: 72px; height: 64px; }
+}
 .note-md a { color: #8a6d3b; text-decoration: underline; }
 .note-sec .note-detail-img {
   max-width: 100%;
