@@ -26,7 +26,7 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
 import { renderHtmlPreviewInto } from './html-doc.js';
 import {
   mediaFromMarkdown, mergeMediaLists, normalizeMediaItem, normalizeMediaList,
-  applyMediaAttrsToMarkdown,
+  applyMediaAttrsToMarkdown, safeMediaSrc,
 } from './media-util.js';
 import { normalizeDocStyle, styleToCss, FONT_OPTIONS } from './doc-style.js';
 
@@ -230,10 +230,11 @@ function syncPhotoMedia() {
 }
 
 function renderPhotoStrip() {
-  if (!photoSources.length) {
+  const visible = photoSources.map((src, i) => ({ src: safeMediaSrc(src), i })).filter((x) => x.src);
+  if (!visible.length) {
     els.photoStrip.innerHTML = '<p class="muted photo-empty">还没有图片。</p>';
   } else {
-    els.photoStrip.innerHTML = photoSources.map((src, i) => `
+    els.photoStrip.innerHTML = visible.map(({ src, i }) => `
       <figure class="photo-thumb" data-photo-idx="${i}">
         <img src="${esc(src)}" alt="照片 ${i + 1}">
         <figcaption>
@@ -398,8 +399,8 @@ function renderConceptSelector() {
 /* ── 图片版式 ── */
 function mediaPreviewSrc(m) {
   if (!m) return '';
-  if (m.id === 'imageData' && (!m.src || m.src === 'imageData')) return photoSources[0] || '';
-  return m.src || '';
+  const raw = m.id === 'imageData' && (!m.src || m.src === 'imageData') ? (photoSources[0] || '') : (m.src || '');
+  return safeMediaSrc(raw);
 }
 
 function renderMediaEditor() {
@@ -727,10 +728,10 @@ async function initEditor() {
 
   photoSources = [];
   assetImages = [];
-  if (rec?.imageData) photoSources.push(rec.imageData);
+  if (rec?.imageData && safeMediaSrc(rec.imageData)) photoSources.push(rec.imageData);
   for (const src of (rec?.images || [])) {
     if (String(src).startsWith('data:image/')) {
-      if (!photoSources.includes(src)) photoSources.push(src);
+      if (safeMediaSrc(src) && !photoSources.includes(src)) photoSources.push(src);
     } else if (src) assetImages.push(src);
   }
   editorMedia = mergeMediaLists(

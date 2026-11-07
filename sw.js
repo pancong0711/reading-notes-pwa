@@ -9,7 +9,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v44';   // v44: 20261107 编辑入口首次无响应 + 返回历史循环修复（含 v43 独立编辑页全量）
+var CACHE_NAME = 'reading-notes-v45';   // v45: 20261107 渲染 XSS/媒体 URL 安全加固 + 图片默认宽度修复（含 v43/v44 全量）
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [

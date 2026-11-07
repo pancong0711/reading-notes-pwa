@@ -9,6 +9,7 @@
  * 接口依赖（并行任务 C 提供）：getAllBooks() / getAllNotes()（来自 data.js）
  */
 import { getAllBooks, getAllNotes, saveBook } from './data.js';
+import { safeMediaSrc } from './media-util.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -171,8 +172,9 @@ function renderDetail(book) {
 
   els.summary.textContent = book.summary || '';
 
-  if (book.cover) {
-    els.cover.src = book.cover;
+  const safeCover = safeMediaSrc(book.cover);
+  if (safeCover) {
+    els.cover.src = safeCover;
     els.cover.hidden = false;
   } else {
     els.cover.removeAttribute('src');

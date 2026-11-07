@@ -11,9 +11,38 @@ export const ROTATE_VALUES = [0, 90, 180, 270];
 export const ALIGN_VALUES = ['left', 'center', 'right'];
 
 export function clampWidth(v, fallback = 100) {
-  const n = Number(String(v == null ? '' : v).replace('%', ''));
+  if (v == null || String(v).trim() === '') return fallback;
+  const n = Number(String(v).replace('%', '').trim());
   if (!Number.isFinite(n)) return fallback;
   return Math.max(10, Math.min(100, Math.round(n)));
+}
+
+/** 媒体 URL 安全收口：拒绝 javascript:/vbscript:/data:text/html 与未知 scheme。
+ *  src：http(s)、blob、站内相对路径、raster data:image；
+ *  href：http(s)、blob、站内相对路径（不把 data/javascript 变成可点击链接）。 */
+function compactUrl(value) {
+  return String(value == null ? '' : value).trim().replace(/[\u0000-\u0020\u007f]+/g, '').toLowerCase();
+}
+
+export function safeMediaSrc(value) {
+  const s = String(value == null ? '' : value).trim();
+  if (!s) return '';
+  const c = compactUrl(s);
+  if (/^data:/.test(c)) {
+    return /^data:image\/(?:png|jpe?g|gif|webp|bmp|avif)[;,]/.test(c) ? s : '';
+  }
+  if (/^(https?:|blob:)/.test(c)) return s;
+  if (/^[a-z][a-z0-9+.-]*:/.test(c)) return '';
+  return s;   // 相对路径、协议相对 //、# 锚点等
+}
+
+export function safeMediaHref(value) {
+  const s = String(value == null ? '' : value).trim();
+  if (!s) return '';
+  const c = compactUrl(s);
+  if (/^(https?:|blob:)/.test(c)) return s;
+  if (/^[a-z][a-z0-9+.-]*:/.test(c)) return '';
+  return s;
 }
 
 export function normalizeRotate(v) {
@@ -137,7 +166,9 @@ function escAttr(s) {
 
 /** 图片 HTML 包装：PWA 详情/打印共用；src 由调用方转义。 */
 export function renderMediaFigure(src, media, { href = '', className = 'note-media' } = {}) {
-  const m = normalizeMediaItem(media || { src });
+  const safeSrc = safeMediaSrc(src);
+  if (!safeSrc) return '';
+  const m = normalizeMediaItem(media || { src: safeSrc });
   const width = m.widthPercent;
   const rotate = m.rotate;
   const align = m.align;
@@ -146,9 +177,10 @@ export function renderMediaFigure(src, media, { href = '', className = 'note-med
     rotate ? `transform:rotate(${rotate}deg)` : '',
   ].filter(Boolean).join(';');
   const boxStyle = `text-align:${align};${rotate === 90 || rotate === 270 ? 'min-height:20vh;' : ''}`;
-  const img = `<img class="note-detail-img note-media-img" src="${escAttr(src)}" data-path="${escAttr(src)}" `
+  const img = `<img class="note-detail-img note-media-img" src="${escAttr(safeSrc)}" data-path="${escAttr(safeSrc)}" `
     + `alt="${escAttr(m.alt || '笔记图片')}" loading="lazy" style="${imgStyle}">`;
-  const inner = href ? `<a href="${escAttr(href)}" target="_blank" rel="noopener">${img}</a>` : img;
+  const safeHref = href ? safeMediaHref(href) : '';
+  const inner = safeHref ? `<a href="${escAttr(safeHref)}" target="_blank" rel="noopener noreferrer">${img}</a>` : img;
   const cap = m.caption ? `<figcaption class="img-caption">${escAttr(m.caption)}</figcaption>` : '';
   return `<figure class="${escAttr(className)}" data-rotate="${rotate}" data-width="${width}" `
     + `data-align="${align}" style="${boxStyle}">${inner}${cap}</figure>`;
@@ -158,4 +190,5 @@ export default {
   normalizeMediaItem, normalizeMediaList, parseImageAttrs, formatImageAttrs,
   mediaFromMarkdown, mergeMediaLists, applyMediaAttrsToMarkdown,
   mediaForSrc, renderMediaFigure, clampWidth, normalizeRotate, normalizeAlign,
+  safeMediaSrc, safeMediaHref,
 };

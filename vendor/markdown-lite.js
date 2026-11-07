@@ -72,7 +72,7 @@ function inline(text) {
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, t, href) => {
     const u = safeUrl(href, false);
     if (!u) return `[${t}](${href})`;
-    return `<a href="${escAttr(u)}" target="_blank" rel="noopener">${t}</a>`;
+    return `<a href="${escAttr(u)}" target="_blank" rel="noopener noreferrer">${t}</a>`;
   });
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   out = out.replace(/__([^_]+)__/g, '<strong>$1</strong>');

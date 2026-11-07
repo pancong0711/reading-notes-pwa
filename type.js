@@ -6,6 +6,7 @@
  *   · 保留 ?t=all&tag= / &concept= 过滤落地页与旧 URL 重定向。
  */
 import { getAllNotes, deleteNote, getAllProjects, getAllBooks } from './data.js';
+import { safeMediaSrc } from './media-util.js';
 import { mountDataActions } from './data-actions.js';
 
 const $ = (id) => document.getElementById(id);
@@ -74,8 +75,9 @@ function renderList(notes) {
     const card = document.createElement('article');
     card.className = 'note-card' + ((n.meta && n.meta.done) ? ' done' : '');
     const typeDef = NoteTypes.getType(n.type || 'note');
-    const thumb = n.imageData || (Array.isArray(n.images) && n.images[0])
-      ? `<img class="note-thumb" src="${esc(n.imageData || n.images[0])}" alt="照片">`
+    const thumbSrc = safeMediaSrc(n.imageData || (Array.isArray(n.images) && n.images[0]));
+    const thumb = thumbSrc
+      ? `<img class="note-thumb" src="${esc(thumbSrc)}" alt="照片">`
       : `<div class="note-thumb note-thumb-empty">${esc(typeDef?.icon || '📝')}</div>`;
     const chips = [];
     if (n.book) chips.push(esc(n.book));

@@ -53,41 +53,87 @@ export function renderHtmlPreviewInto(container, content, { style = '' } = {}) {
 }
 
 
-/** 打印稿 HTML 清洗：浏览器用 DOMParser 白名单清理；node 无 DOM 时降级为安全文本。 */
+/** 打印稿 HTML 清洗：浏览器用 DOMParser 白名单清理；node 无 DOM 时降级为安全文本。
+ *
+ * 安全要点（20261107 审核修复）：
+ *   · 先取全量元素快照，再处理——非白名单标签被“展开”后，其子元素仍会被后续遍历清洗，
+ *     修复 <foo><script>…</script></foo> 这类嵌套绕过；
+ *   · href/src 去掉 ASCII 控制字符后再判断 scheme，避免 java\tscript: 等绕过；
+ *   · style 只允许白名单属性，拒绝反斜杠转义、url()、@import、expression 等注入面。
+ */
 export function sanitizeHtmlForPrint(raw) {
   const src = String(raw == null ? '' : raw);
   if (typeof DOMParser === 'undefined') {
     return `<pre class="note-text">${String(src).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}</pre>`;
   }
   const ALLOWED = new Set(['P','BR','DIV','SPAN','H1','H2','H3','H4','H5','H6','UL','OL','LI','BLOCKQUOTE','PRE','CODE','STRONG','B','EM','I','U','S','DEL','MARK','A','IMG','TABLE','THEAD','TBODY','TFOOT','TR','TH','TD','HR','FIGURE','FIGCAPTION','SUP','SUB','SMALL']);
-  const DROP = new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','FORM','BASE','META','LINK']);
+  const DROP = new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','FORM','BASE','META','LINK','TEMPLATE','NOSCRIPT']);
   const ALLOWED_ATTR = new Set(['href','src','alt','title','class','style','colspan','rowspan','width','height','data-width','data-rotate','data-align']);
+  const ALLOWED_STYLE_PROPS = new Set([
+    'font-family','font-size','font-weight','text-align','text-decoration','line-height',
+    'width','max-width','min-width','height','max-height','min-height',
+    'transform','transform-origin','margin','margin-top','margin-right','margin-bottom','margin-left',
+    'padding','padding-top','padding-right','padding-bottom','padding-left',
+    'color','background-color','border','border-color','border-width','border-style','border-radius',
+  ]);
+
+  const compactScheme = (value) => String(value || '')
+    .replace(/[\u0000-\u0020\u007f]+/g, '').toLowerCase();
+
+  const safeUrl = (value, isSrc) => {
+    const v = String(value || '').trim();
+    if (!v) return false;
+    const c = compactScheme(v);
+    if (c.startsWith('#')) return true;
+    if (/^(https?:|mailto:)/.test(c)) return !isSrc || /^https?:/.test(c);
+    if (isSrc && /^blob:/.test(c)) return true;
+    if (isSrc && /^data:image\/(?:png|jpe?g|gif|webp|bmp|avif)[;,]/.test(c)) return true;
+    if (/^[a-z][a-z0-9+.-]*:/.test(c)) return false;   // 其他 scheme 一律拒绝
+    return true;                                        // 相对路径 / #锚点 / //host
+  };
+
+  const safeStyle = (value) => {
+    const v = String(value || '').trim();
+    if (!v) return false;
+    if (/[\\<>{}]|\/\*|\*\//.test(v) || /url\s*\(|@import|expression\s*\(|javascript:|behavior\s*:|-moz-binding/i.test(v)) return false;
+    for (const part of v.split(';')) {
+      const text = part.trim();
+      if (!text) continue;
+      const idx = text.indexOf(':');
+      if (idx <= 0) return false;
+      const prop = text.slice(0, idx).trim().toLowerCase();
+      if (!ALLOWED_STYLE_PROPS.has(prop)) return false;
+    }
+    return true;
+  };
+
   const doc = new DOMParser().parseFromString(src, 'text/html');
-  const walk = (node) => {
-    for (const child of [...node.childNodes]) {
-      if (child.nodeType === 1) {
-        const tag = child.tagName;
-        if (DROP.has(tag)) { child.remove(); continue; }
-        if (!ALLOWED.has(tag)) {
-          while (child.firstChild) node.insertBefore(child.firstChild, child);
-          child.remove();
-          continue;
-        }
-        for (const attr of [...child.attributes]) {
-          const name = attr.name.toLowerCase();
-          const val = String(attr.value || '');
-          const lower = val.trim().toLowerCase();
-          if (name.startsWith('on') || !ALLOWED_ATTR.has(name)
-            || ((name === 'href' || name === 'src') && /^(javascript:|vbscript:|data:text\/html)/i.test(lower))
-            || (name === 'style' && /(url\s*\(|@import|expression\s*\(|javascript:)/i.test(lower))) {
-            child.removeAttribute(attr.name);
-          }
-        }
-        walk(child);
+  // 全量快照：即使父元素被展开/删除，后代元素仍会进入本轮清洗。
+  const elements = [...doc.body.querySelectorAll('*')];
+  for (const el of elements) {
+    const tag = String(el.tagName || '').toUpperCase();   // SVG 等命名空间元素 tagName 为小写
+    if (DROP.has(tag)) { el.remove(); continue; }
+    if (!ALLOWED.has(tag)) {
+      const parent = el.parentNode;
+      if (!parent) continue;
+      while (el.firstChild) parent.insertBefore(el.firstChild, el);
+      parent.removeChild(el);
+      continue;
+    }
+    for (const attr of [...el.attributes]) {
+      const name = attr.name.toLowerCase();
+      const val = String(attr.value || '');
+      if (name.startsWith('on') || !ALLOWED_ATTR.has(name)) {
+        el.removeAttribute(attr.name);
+        continue;
+      }
+      if ((name === 'href' && !safeUrl(val, false))
+        || (name === 'src' && !safeUrl(val, true))
+        || (name === 'style' && !safeStyle(val))) {
+        el.removeAttribute(attr.name);
       }
     }
-  };
-  walk(doc.body);
+  }
   return doc.body.innerHTML;
 }
 

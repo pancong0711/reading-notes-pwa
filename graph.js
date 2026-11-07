@@ -6,6 +6,7 @@
  *   - 书过滤 / 搜索 / 域显隐（图例）保留
  */
 import { renderNoteDetail } from './note-detail.js';
+import { safeMediaSrc } from './media-util.js';
 import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
 (() => {
   'use strict';
@@ -50,7 +51,13 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  function domainColor(id) { return colorOf[id] || '#b8b2a6'; }
+  function safeColor(value, fallback = '#b8b2a6') {
+    var c = String(value || '').trim();
+    if (/^#[0-9a-f]{3,8}$/i.test(c)) return c;
+    if (/^(rgb|rgba|hsl|hsla)\([0-9.,%\s]+\)$/i.test(c)) return c;
+    return fallback;
+  }
+  function domainColor(id) { return safeColor(colorOf[id]); }
   function domainName(id) { return (domainById[id] && domainById[id].name) || id; }
 
   /* ══ 数据装配：graph.json → 概念节点 + 概念间边 ══ */
@@ -123,7 +130,7 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
         conceptId: c.id,
         domain: c.domain,
         name: c.name,
-        note_count: c.note_count || 0,
+        note_count: Number(c.note_count) || 0,
         related: c.related || [],
         notes: c.notes || [],
         x: undefined, y: undefined,
@@ -255,7 +262,7 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
   }
 
   function nodeRadius(d) {
-    return 10 + Math.min(Math.sqrt(d.note_count || 0) * 4.5, 22);
+    return 10 + Math.min(Math.sqrt(Number(d.note_count) || 0) * 4.5, 22);
   }
 
   function update() {
@@ -352,9 +359,9 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
         var hidden = hiddenDomains[d.id];
         return '<button type="button" class="graph-legend-item' + (hidden ? ' off' : '') +
           '" data-domain="' + esc(d.id) + '">' +
-          '<span class="dot" style="background:' + esc(colorOf[d.id] || d.color || '#b8b2a6') + '"></span>' +
+          '<span class="dot" style="background:' + esc(domainColor(d.id)) + '"></span>' +
           '<span class="name">' + esc(d.name) + '</span>' +
-          '<span class="count">' + (d.note_count || 0) + '</span></button>';
+          '<span class="count">' + (Number(d.note_count) || 0) + '</span></button>';
       }).join('');
     legendEl.querySelectorAll('.graph-legend-item').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -516,8 +523,9 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
       (n.images && n.images.length
         ? '<div class="graph-panel-section"><h3>原文图片</h3><div class="graph-images">' +
           n.images.map(function (src, i) {
-            if (typeof src !== 'string') return '';
-            return '<img loading="lazy" src="' + esc(src) + '" alt="' + esc(n.title) + ' 图' + (i + 1) +
+            var safe = safeMediaSrc(src);
+            if (!safe) return '';
+            return '<img loading="lazy" src="' + esc(safe) + '" alt="' + esc(n.title) + ' 图' + (i + 1) +
               '" onerror="this.style.display=\'none\'">';
           }).join('') +
           '</div></div>'
@@ -604,7 +612,7 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
       });
       if (!order.length) { uncataloguedEl.hidden = true; return; }
       order.sort(function (a, b) { return counts[b] - counts[a] || a.localeCompare(b); });
-      var head = order.slice(0, 5).map(function (id) { return id + '×' + counts[id]; }).join('、');
+      var head = order.slice(0, 5).map(function (id) { return esc(id) + '×' + counts[id]; }).join('、');
       var more = order.length > 5 ? ' 等 ' + order.length + ' 个' : '';
       uncataloguedEl.innerHTML =
         '💡 本机记录引用了 <b>' + order.length + '</b> 个未编目概念（' + head + more + '），图谱暂未收录 —— '

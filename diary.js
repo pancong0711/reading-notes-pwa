@@ -228,8 +228,8 @@
               '<p class="entry-content">' + escapeHtml(r.content) + '</p>' +
               '<div class="entry-actions">' +
                 '<span class="entry-time">' + escapeHtml(time) + '</span>' +
-                '<button class="btn-ghost btn-small" data-action="edit" data-id="' + r.id + '">编辑</button>' +
-                '<button class="btn-danger btn-small" data-action="delete" data-id="' + r.id + '">删除</button>' +
+                '<button class="btn-ghost btn-small" data-action="edit" data-id="' + escapeHtml(String(r.id)) + '">编辑</button>' +
+                '<button class="btn-danger btn-small" data-action="delete" data-id="' + escapeHtml(String(r.id)) + '">删除</button>' +
               '</div>' +
             '</div>'
           );

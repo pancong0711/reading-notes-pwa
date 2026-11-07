@@ -17,6 +17,7 @@ import {
   addNote,
   deleteNote,
 } from './data.js';
+import { safeMediaSrc } from './media-util.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -148,8 +149,9 @@ function renderList(notes) {
     const card = document.createElement('article');
     card.className = 'note-card';
 
-    const thumb = n.imageData
-      ? `<img class="note-thumb" src="${n.imageData}" alt="书页照片">`
+    const thumbSrc = safeMediaSrc(n.imageData);
+    const thumb = thumbSrc
+      ? `<img class="note-thumb" src="${esc(thumbSrc)}" alt="书页照片">`
       : `<div class="note-thumb note-thumb-empty">${esc((n.book || '书')[0])}</div>`;
 
     const readerHtml = n.readerNote
