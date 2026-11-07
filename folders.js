@@ -46,7 +46,8 @@ function typeLabel(key) {
 let manageMode = false;
 let searchQuery = '';
 let allNotes = [];
-let editingPath = null;   // 非 null = 重命名模式
+let editingPath = null;   // 非 null = 重命名/移动模式
+let folderEditMode = 'rename';   // rename | move
 
 /* ── 渲染 ── */
 
@@ -108,6 +109,7 @@ async function render() {
       if (btn.dataset.act === 'rename') {
         if (path === OTHERS) { toast('other 为系统默认文件夹，不能重命名', 3600); return; }
         editingPath = path;
+        folderEditMode = 'rename';
         $('folder-panel-title').textContent = `重命名文件夹：${path}`;
         $('folder-path').value = path;
         $('folder-panel-msg').textContent = '';
@@ -115,14 +117,15 @@ async function render() {
         $('folder-path').focus();
       } else if (btn.dataset.act === 'move') {
         if (path === OTHERS) { toast('other 为系统默认文件夹，不能移动', 3600); return; }
-        // 移动 = 子树换根（与重命名同机制）：输入完整新路径（可含新父级）
-        const to = prompt(`移动文件夹（输入完整新路径，可换父级）：\n当前：${path}`, path);
-        if (!to || !to.trim() || to.trim() === path) return;
-        try {
-          const changed = await renameFolder(path, to.trim());
-          toast(`已移动 → ${to.trim()}（受影响记录 ${changed} 篇）`);
-          await render();
-        } catch (err) { toast(`移动失败：${err.message}`, 4200); }
+        // 移动 = 子树换根（与重命名同机制）；手机端不再使用原生 prompt，复用固定模态面板
+        editingPath = path;
+        folderEditMode = 'move';
+        $('folder-panel-title').textContent = `移动文件夹：${path}`;
+        $('folder-path').value = path;
+        $('folder-panel-msg').textContent = '';
+        $('folder-panel').hidden = false;
+        $('folder-path').focus();
+        $('folder-path').select();
       } else if (btn.dataset.act === 'delete') {
         if (path === OTHERS) { toast('other 为系统默认文件夹，不能删除', 3600); return; }
         const stats = folderStats(notes, path);
@@ -166,6 +169,7 @@ function renderSearchResults(notes) {
 
 function openNewFolder() {
   editingPath = null;
+  folderEditMode = 'rename';
   $('folder-panel-title').textContent = '新建文件夹';
   $('folder-path').value = '';
   $('folder-panel-msg').textContent = '';
@@ -179,7 +183,10 @@ async function saveFolder() {
   try {
     if (editingPath) {
       const changed = await renameFolder(editingPath, raw);
-      toast(changed ? `已重命名，${changed} 篇记录已改归属` : '已重命名');
+      toast(folderEditMode === 'move'
+        ? `已移动 → ${raw.trim()}（受影响记录 ${changed} 篇）`
+        : (changed ? `已重命名，${changed} 篇记录已改归属` : '已重命名'));
+      folderEditMode = 'rename';
     } else {
       const rec = await createFolder(raw);
       toast(`已创建文件夹：${rec.path}`);
@@ -197,8 +204,8 @@ async function saveFolder() {
 $('new-folder-btn').addEventListener('click', openNewFolder);
 $('search-input').addEventListener('input', (e) => { searchQuery = e.target.value; render(); });
 $('new-note-btn').addEventListener('click', () => {
-  // 目录页直接新建（默认阅读笔记，project 默认 other，可在编辑器内改）
-  location.href = 'type.html?t=note&new=1&ret=';
+  // 目录页直接新建：统一进入独立编辑页，保存后回目录并高亮新记录
+  location.href = `editor.html?type=note&ret=${encodeURIComponent('folders.html')}`;
 });
 // 数据管理入口（⚙️ 数据）：导入/备份/导出生成/类型/标签——共享模块（20260911 回归修复）
 mountDataActions({ onChange: render, getCurrentType: () => null });

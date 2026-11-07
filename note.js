@@ -2,7 +2,7 @@
  *
  * 全屏阅读单条记录（笔记/日记/日志/备忘/自定义类型通用）：
  *   ?id=<记录id> → getNoteById → note-detail 全量渲染（markdown/公式排版/图片自包含供图）
- *   「✏️ 编辑」→ type.html?t=<type>&edit=<id>（统一编辑器，保存后回跳本页）
+ *   「✏️ 编辑」→ editor.html?id=<id>&ret=<本页>（独立编辑器，保存后回跳本页）
  *   「← 返回」→ history.back()（无来源时回 type.html?t=<type>）
  *   返回顶部 FAB（需求 20260905-②）：下滑超 400px 淡入，点击平滑回顶（reduced-motion 直跳）
  *   📜 简要年表（需求 20260922 C）：内容类事件账本折叠展示，FIFO≤20，仅本端
@@ -113,13 +113,14 @@ async function load() {
   renderHistoryBlock(note);   // 📜 简要年表（需求 20260922 C）
 
   $('edit-btn').addEventListener('click', () => {
-    location.href = `type.html?t=${encodeURIComponent(note.type || 'note')}&edit=${encodeURIComponent(note.id)}`;
+    const ret = `note.html?id=${encodeURIComponent(note.id)}`;
+    location.href = `editor.html?id=${encodeURIComponent(note.id)}&ret=${encodeURIComponent(ret)}`;
   });
 }
 
 $('back-btn').addEventListener('click', () => {
   if (history.length > 1) history.back();
-  else location.href = 'type.html';
+  else location.href = 'folders.html';
 });
 
 /* ── 阅读字号档位（需求 20260905-批次三：四档 popover）──

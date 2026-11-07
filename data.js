@@ -41,13 +41,14 @@
 import { normalizeProject, OTHERS as OTHERS_FOLDER, rebasePath } from './folder-util.js';
 
 const DB_NAME = 'reading-notes';
-const DB_VERSION = 7;   // v2：type 索引；v3：books store；v4：concept_catalog；v5：graph_local；v6：image_store；v7：folder_store（文件夹/项目，path→记录；diary.js 同步升级）
+const DB_VERSION = 8;   // v2：type 索引；v3：books store；v4：concept_catalog；v5：graph_local；v6：image_store；v7：folder_store；v8：editor_draft（编辑器草稿；diary.js 同步升级）
 const STORE = 'notes';
 const BOOKS_STORE = 'books';
 const CONCEPTS_STORE = 'concept_catalog';   // 概念目录工作副本，keyPath: id
 const GRAPH_LOCAL_STORE = 'graph_local';    // 本机重算 union 图谱存档，keyPath: id
 const IMAGE_STORE = 'image_store';          // 图片自包含仓（迁移包导入/ SW 网络回填），keyPath: path
 const FOLDER_STORE = 'folder_store';        // 文件夹（= project 路径）显式登记，keyPath: path
+const DRAFT_STORE = 'editor_draft';         // 编辑器未保存草稿，keyPath: key
 
 let _dbPromise = null;
 let _noteSeq = 0;   // 本地新记录 id 递增序号，避免同一毫秒内并发/连续新增时 id 冲突
@@ -98,6 +99,10 @@ function openDB() {
       if (!db.objectStoreNames.contains(FOLDER_STORE)) {
         // v7 新增：文件夹登记表（支持预先创建空文件夹；diary.js/sw.js 同步补建）
         db.createObjectStore(FOLDER_STORE, { keyPath: 'path' });
+      }
+      if (!db.objectStoreNames.contains(DRAFT_STORE)) {
+        // v8 新增：编辑器草稿（文本/图片/媒体版式；diary.js 同步补建）
+        db.createObjectStore(DRAFT_STORE, { keyPath: 'key' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -961,6 +966,47 @@ function optsPinnedPreserve() {
   return { skipHistory: true };
 }
 
+
+/* ══════════════════════════════════════════════════════════
+   编辑器草稿（手机端误切后台/返回时保护未保存内容）
+   keyPath: key；同一编辑目标只保留最新一份，由编辑器在成功保存后清理。
+   ══════════════════════════════════════════════════════════ */
+
+/** 保存/覆盖编辑器草稿 */
+export async function saveEditorDraft(key, data) {
+  const db = await openDB();
+  const rec = { ...(data || {}), key: String(key || 'new'), savedAt: Date.now() };
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(DRAFT_STORE, 'readwrite');
+    tx.objectStore(DRAFT_STORE).put(rec);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+  return rec;
+}
+
+/** 读取编辑器草稿（无则 null） */
+export async function getEditorDraft(key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(DRAFT_STORE, 'readonly').objectStore(DRAFT_STORE).get(String(key || 'new'));
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/** 删除编辑器草稿 */
+export async function deleteEditorDraft(key) {
+  const db = await openDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(DRAFT_STORE, 'readwrite');
+    tx.objectStore(DRAFT_STORE).delete(String(key || 'new'));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
 
 /** 删除单条笔记 */
 export async function deleteNote(id) {

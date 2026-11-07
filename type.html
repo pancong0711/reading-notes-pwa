@@ -2,18 +2,11 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>记录 · 读书笔记</title>
-  <link rel="stylesheet" href="styles.css?v=20261024c">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css?v=20261107a">
   <script src="reading-font.js"></script>
-  <style>
-    /* 导出/生成面板（范围选择行 + 操作按钮） */
-    .export-scope { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
-    .export-opt { display: flex; align-items: center; gap: 8px; font-size: 14px; }
-    .export-opt select,
-    .export-opt input[type="date"] { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; }
-    .export-actions { display: flex; gap: 10px; margin-top: 14px; }
-  </style>
 </head>
 <body>
   <header class="site-header">
@@ -24,15 +17,14 @@
   </header>
 
   <main class="container">
-    <!-- 类型标题 -->
     <section class="welcome">
       <h1 id="type-title">记录</h1>
       <p id="type-hint"></p>
     </section>
 
-    <!-- 工具栏 -->
+    <!-- 列表筛选栏（项目/书名/日期区间 + 快捷；与搜索 AND 叠加） -->
     <div class="filter-bar" id="filter-bar">
-      <select id="filter-project"><option value="">全部项目</option></select>
+      <select id="filter-project"><option value="">全部文件夹</option></select>
       <select id="filter-book"><option value="">全部书名</option></select>
       <input type="date" id="filter-from" title="起始日期">
       <span class="muted">～</span>
@@ -41,6 +33,7 @@
       <button type="button" class="btn ghost small" data-quick="year">今年</button>
       <button type="button" class="btn ghost small" data-quick="clear">清空</button>
     </div>
+
     <div class="toolbar">
       <input id="search-input" type="search" placeholder="搜索标题/内容/读者注/AI注…">
       <span class="count" id="record-count"></span>
@@ -50,119 +43,14 @@
       </div>
     </div>
 
-    <!-- 列表挂载点 -->
-    <!-- 导入结果内联行（20260911）：紧随工具栏，免滚页底 -->
     <p class="import-status" id="import-status" hidden></p>
-
     <div id="record-list"></div>
 
-    <!-- 空状态 -->
     <div class="empty-state" id="empty-state" hidden>
       <h2 id="empty-title">还没有记录</h2>
       <p id="empty-hint">点「写一篇」随手记录。</p>
       <button class="btn" id="empty-new-btn" type="button">写一篇</button>
     </div>
-
-    <!-- 新建/编辑表单（统一编辑器，字段随类型动态增减） -->
-    <div id="editor" class="editor" hidden>
-      <h2 id="editor-title">写一篇</h2>
-
-      <div class="editor-photo">
-        <input type="file" id="photo-input" accept="image/*" capture="environment" hidden>
-        <button class="btn ghost" id="photo-btn" type="button">拍照 / 选图</button>
-        <img id="photo-preview" class="photo-preview" alt="照片预览" hidden>
-      </div>
-
-      <label class="field">类型
-        <select id="f-type"></select>
-      </label>
-
-      <!-- 类型附加字段（book/pages/done/due 等，由 type.js 按 fields 动态生成） -->
-      <div id="type-fields"></div>
-
-      <label class="field">日期
-        <input id="f-date" type="date">
-      </label>
-
-      <label class="field">标题
-        <input id="f-title" type="text" placeholder="可留空，保存时自动生成">
-      </label>
-
-      <label class="field">标签
-        <input id="f-tags" type="text" list="tag-history" placeholder="逗号分隔，如：光学, 生活篇（输入时可从既有标签提示）">
-        <datalist id="tag-history"></datalist>
-      </label>
-
-      <label class="field">项目（可选）
-        <input id="f-project" type="text" list="project-list" placeholder="因项目而读时填写，如：项目A-调研">
-        <datalist id="project-list"></datalist>
-      </label>
-
-      <div class="field" id="media-editor-field" hidden>
-        <span>图片版式（非破坏性：原图不变）</span>
-        <div id="media-editor" class="media-editor"></div>
-        <p class="field-hint">旋转/宽度/对齐仅保存为 JSON 显示属性；导出 Markdown 时写入图片属性后缀。</p>
-      </div>
-
-      <label class="field">正文格式
-        <select id="f-format">
-          <option value="markdown">Markdown（推荐）</option>
-          <option value="html">HTML（沙箱预览/源码编辑）</option>
-          <option value="text">纯文本</option>
-        </select>
-        <span class="field-hint">导入的 md/html/txt 会以 JSON 记录管理；编辑不会修改原文件。</span>
-      </label>
-
-      <div class="field">
-        <span>正文样式（文档级白名单）</span>
-        <div class="doc-style-controls">
-          <label>字体 <select id="f-font"></select></label>
-          <label>对齐 <select id="f-align">
-            <option value="left">左</option><option value="center">居中</option>
-            <option value="right">右</option><option value="justify">两端</option>
-          </select></label>
-          <label>行距 <select id="f-line-height">
-            <option value="compact">紧凑</option><option value="normal">标准</option>
-            <option value="loose">宽松</option>
-          </select></label>
-        </div>
-        <span class="field-hint">只允许白名单字体/对齐/行距，PWA 与 PDF 同口径。</span>
-      </div>
-
-      <label class="field">内容
-        <div class="md-editor">
-          <div class="md-toolbar" id="md-toolbar" role="toolbar" aria-label="文本格式"></div>
-          <textarea id="f-content" rows="3" placeholder="写下内容……（支持 **粗体**、*斜体*、==高亮==、公式 $E=mc^2$、$$…$$ 等）"></textarea>
-          <div class="md-preview note-md" id="md-preview" hidden></div>
-          <button type="button" class="btn ghost small" id="md-preview-toggle">👁 预览</button>
-        </div>
-      </label>
-
-      <label class="field">读者注
-        <textarea id="f-reader" rows="2" placeholder="自己的思考（AI 不代笔）"></textarea>
-      </label>
-
-      <div class="field">
-        <div class="field-head">
-          <span>AI注</span>
-          <button class="btn ghost small" id="ask-ai-btn" type="button">咨询 AI 并填入</button>
-        </div>
-        <textarea id="f-ai" rows="3" placeholder="与 AI 咨询的内容 / AI 的解答（可粘贴回复，或点「咨询 AI」）"></textarea>
-      </div>
-
-      <div class="field" id="concept-field" hidden>
-        <span>概念标签（知识图谱）</span>
-        <div id="concept-select" class="concept-select"></div>
-        <p class="field-hint">从 graph.json 的知识图谱概念中选择，保存为 source=user</p>
-      </div>
-
-      <div class="editor-actions">
-        <button class="btn primary" id="save-btn" type="button">保存</button>
-        <button class="btn ghost" id="cancel-btn" type="button">取消</button>
-      </div>
-    </div>
-
-    <!-- 标签整理面板 -->
   </main>
 
   <footer class="site-footer">
@@ -175,6 +63,9 @@
   <script src="sw-register.js"></script>
   <script src="panel-modal.js"></script>
   <script src="types.js"></script>
-  <script type="module" src="type.js?v=20261024c"></script>
+  <script>
+    document.getElementById('main-nav').innerHTML = NoteTypes.renderNav('folders');
+  </script>
+  <script type="module" src="type.js?v=20261107a"></script>
 </body>
 </html>

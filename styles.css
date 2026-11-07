@@ -1869,3 +1869,205 @@ a.tag:hover {
 .note-history-list { margin: 6px 0 0; padding-left: 18px; }
 .note-history-list li { margin: 2px 0; line-height: 1.5; }
 .edit-badge { color: #8a7f5c; font-size: 0.9em; }
+
+/* ══════════════════════════════════════════════════════════
+   20261107 手机端笔记创建/编辑与拍照体验
+   ── 独立编辑页 / 固定保存栏 / 相机相册分离 / 文件夹入口 / 操作面板
+   ══════════════════════════════════════════════════════════ */
+
+/* 文件夹页：新建入口与多选批量栏分离，保证空文件夹也有主 CTA */
+.folder-command-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0 10px;
+}
+.folder-command-bar .btn.primary { flex: 1 1 220px; }
+.folder-command-bar .btn { min-height: 42px; }
+.bulk-bar {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f7f5ef;
+}
+.filter-collapse {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f7f5ef;
+  margin: 0 0 10px;
+}
+.filter-collapse > summary {
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.filter-collapse .filter-bar { margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0 0 10px 10px; }
+.note-card.saved-highlight {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 8px 24px rgba(80, 60, 20, .12);
+}
+
+/* 单篇操作面板：手机上替代卡片上一排小按钮 */
+.card-action-list { display: grid; gap: 8px; margin-top: 12px; }
+.card-action-list .btn { width: 100%; min-height: 44px; text-align: left; }
+.card-action-list .btn.danger { color: #b05a4a; }
+
+/* 独立编辑页 */
+.editor-body { background: #faf8f4; }
+.editor-appbar {
+  position: sticky;
+  top: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) 8px max(14px, env(safe-area-inset-left, 0px));
+  background: rgba(250, 248, 244, .96);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+}
+.editor-back {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.editor-appbar-title { min-width: 0; flex: 1; }
+.editor-appbar-title h1 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.editor-save-status { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; min-height: 13px; }
+.editor-save-btn { flex: 0 0 auto; min-width: 72px; min-height: 40px; padding: 6px 16px; }
+.editor-page { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+.editor-page-card {
+  margin-top: 10px;
+  padding: 16px;
+  background: #fffdf9;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.draft-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #e8c880;
+  border-radius: 10px;
+  background: #fff8e6;
+  color: #6d5726;
+  font-size: 13px;
+}
+.draft-banner > span { flex: 1 1 180px; }
+.editor-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+  padding: 9px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 14px;
+}
+.editor-context-label { color: var(--muted); }
+.editor-context strong { color: var(--ink); overflow-wrap: anywhere; }
+.editor-context .btn { margin-left: auto; min-height: 36px; }
+.editor-photo-section { padding-bottom: 14px; border-bottom: 1px dashed var(--line); margin-bottom: 14px; }
+.editor-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.editor-section-head h2 { margin: 0; font-size: 16px; color: var(--ink); }
+.photo-source-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.photo-source-buttons .btn { min-height: 44px; }
+.photo-strip { display: flex; gap: 10px; overflow-x: auto; padding: 12px 2px 4px; -webkit-overflow-scrolling: touch; }
+.photo-thumb {
+  flex: 0 0 112px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f7f5ef;
+  overflow: hidden;
+}
+.photo-thumb img { display: block; width: 112px; height: 96px; object-fit: cover; }
+.photo-thumb figcaption { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 4px 6px; font-size: 11px; color: var(--muted); }
+.photo-thumb .btn { padding: 2px 6px; min-height: 28px; font-size: 11px; }
+.photo-empty { margin: 10px 0 0; }
+.editor-title-field input {
+  font-size: 20px;
+  font-weight: 700;
+  padding: 10px 12px;
+}
+.editor-content-field textarea { min-height: 260px; line-height: 1.75; }
+.editor-advanced {
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.editor-advanced > summary {
+  padding: 12px 14px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  cursor: pointer;
+  background: #f7f5ef;
+}
+.editor-advanced-body { padding: 12px 14px 2px; }
+.field-sub { display: block; margin: 8px 0; font-size: 12px; color: var(--muted); }
+.field-sub input { display: block; width: 100%; margin-top: 4px; }
+.ai-settings { padding: 10px; border: 1px dashed var(--line); border-radius: 8px; }
+.editor-bottom-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  gap: 10px;
+  margin: 16px -16px calc(-16px - env(safe-area-inset-bottom, 0px));
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: rgba(255, 253, 249, .97);
+  border-top: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+}
+.editor-bottom-actions .btn { flex: 1; min-height: 46px; }
+
+/* 手机端：避免 iOS 聚焦输入框自动缩放；主要控件满足触摸目标 */
+@media (max-width: 600px) {
+  .field input,
+  .field textarea,
+  .field select,
+  .field-sub input,
+  #search-input,
+  .md-editor textarea,
+  .filter-bar select,
+  .filter-bar input {
+    font-size: 16px;
+  }
+  .btn { min-height: 44px; }
+  .btn.small { min-height: 36px; }
+  .editor-appbar { min-height: 52px; }
+  .editor-page { padding-left: 10px; padding-right: 10px; }
+  .editor-page-card { padding: 12px; border-radius: 12px; }
+  .editor-bottom-actions { margin-left: -12px; margin-right: -12px; padding-left: 12px; padding-right: 12px; }
+  .editor-title-field input { font-size: 19px; }
+  .md-toolbar { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .md-toolbar button { min-height: 38px; flex: 0 0 auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-card.saved-highlight { animation: none; }
+}

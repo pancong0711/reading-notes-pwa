@@ -2,9 +2,10 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>笔记 · 读书笔记</title>
-  <link rel="stylesheet" href="styles.css?v=20260911">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css?v=20261107a">
   <script src="reading-font.js"></script>
 </head>
 <body>
@@ -18,11 +19,11 @@
   <main class="container">
     <section class="welcome">
       <h1>📒 笔记</h1>
-      <p>按文件夹（项目）管理全部记录——阅读笔记 / 日记 / 日志 / 备忘。点文件夹进入；未归类的记录在 <code>other</code>。</p>
+      <p>按文件夹管理全部记录——阅读笔记 / 日记 / 日志 / 备忘。点文件夹进入；未归类的记录在 <code>other</code>。</p>
     </section>
 
     <div class="toolbar">
-      <input type="search" id="search-input" placeholder="搜索全部笔记（标题/正文/读者注/AI注/项目/标签）…" autocomplete="off">
+      <input type="search" id="search-input" placeholder="搜索全部笔记（标题/正文/读者注/AI注/文件夹/标签）…" autocomplete="off">
       <span class="count" id="folder-count"></span>
       <div class="toolbar-actions">
         <button class="btn primary" id="new-note-btn" type="button">＋ 写一篇</button>
@@ -57,7 +58,7 @@
 
     <div class="empty-state" id="empty-state" hidden>
       <h2>还没有文件夹</h2>
-      <p>点「＋ 新建文件夹」创建，或在写笔记时填写项目名。</p>
+      <p>点「＋ 新建文件夹」创建，或进入文件夹后直接写笔记。</p>
     </div>
   </main>
 

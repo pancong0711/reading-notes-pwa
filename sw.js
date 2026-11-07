@@ -9,7 +9,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v42';   // v42: 20261024 类型注册表双向 JSON + 结构化 JSON 错误 + HTML 清洗 fixture + PDF 物理旋转
+var CACHE_NAME = 'reading-notes-v43';   // v43: 20261107 独立编辑页 + 相机/相册分离 + 草稿 + 文件夹入口修复
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [
@@ -28,6 +28,11 @@ var CORE_ASSETS = [
   './types.js',
   './type.html',
   './type.js',
+  './editor.html',   // v43：独立编辑页（新建/编辑统一入口）
+  './editor.js',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/apple-touch-icon.png',
   './activity.js',
   './file-warning.js',
   './sw-register.js',

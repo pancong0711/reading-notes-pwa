@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#c9a96e">
+  <title>编辑笔记 · 读书笔记</title>
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css?v=20261107a">
+  <script src="reading-font.js"></script>
+</head>
+<body class="editor-body">
+  <!-- 独立编辑页：固定顶栏（返回 / 标题 / 保存），列表页不再承载编辑表单 -->
+  <header class="editor-appbar" id="editor-appbar">
+    <button class="editor-back" id="back-btn" type="button" aria-label="返回">←</button>
+    <div class="editor-appbar-title">
+      <h1 id="editor-title">新建笔记</h1>
+      <span class="editor-save-status" id="save-status" aria-live="polite"></span>
+    </div>
+    <button class="btn primary editor-save-btn" id="save-btn-top" type="button" data-save>保存</button>
+  </header>
+
+  <main class="container editor-page">
+    <div class="draft-banner" id="draft-banner" hidden>
+      <span>发现上次未保存的草稿</span>
+      <button class="btn ghost small" id="draft-restore-btn" type="button">恢复草稿</button>
+      <button class="btn ghost small danger" id="draft-discard-btn" type="button">丢弃</button>
+    </div>
+
+    <div class="editor-context">
+      <span class="editor-context-label">📁 保存到</span>
+      <strong id="folder-label">other</strong>
+      <button class="btn ghost small" id="folder-pick-btn" type="button">更改文件夹</button>
+    </div>
+
+    <div id="editor" class="editor editor-page-card">
+      <!-- 图片：相机与相册分离；相册 input 不带 capture，支持多选 -->
+      <section class="editor-photo-section" aria-labelledby="photo-section-title">
+        <div class="editor-section-head">
+          <h2 id="photo-section-title">书页/图片</h2>
+          <span class="muted">可拍一张或多张，也可从手机相册选择</span>
+        </div>
+        <input type="file" id="photo-input-camera" accept="image/*" capture="environment" hidden>
+        <input type="file" id="photo-input-gallery" accept="image/*" multiple hidden>
+        <div class="photo-source-buttons">
+          <button class="btn ghost" id="photo-camera-btn" type="button">📷 拍照</button>
+          <button class="btn ghost" id="photo-gallery-btn" type="button">🖼 从相册选择</button>
+        </div>
+        <div class="photo-strip" id="photo-strip"></div>
+        <p class="field-hint" id="photo-hint">图片会压缩后保存在本机；正文中可用图片版式调整方向、宽度与对齐。</p>
+      </section>
+
+      <label class="field editor-title-field">标题
+        <input id="f-title" type="text" placeholder="可留空，保存时自动生成" autocomplete="off">
+      </label>
+
+      <div class="field editor-content-field">
+        <span>正文</span>
+        <div class="md-editor">
+          <div class="md-toolbar" id="md-toolbar" role="toolbar" aria-label="文本格式"></div>
+          <textarea id="f-content" rows="10" placeholder="写下内容……（支持 **粗体**、*斜体*、==高亮==、公式 $E=mc^2$、$$…$$ 等）"></textarea>
+          <div class="md-preview note-md" id="md-preview" hidden></div>
+          <button type="button" class="btn ghost small" id="md-preview-toggle">👁 预览</button>
+        </div>
+      </div>
+
+      <label class="field">读者注
+        <textarea id="f-reader" rows="4" placeholder="自己的思考（AI 不代笔）"></textarea>
+      </label>
+
+      <details class="editor-advanced" open>
+        <summary>更多信息（类型 / 日期 / 标签 / 书名 / 页码）</summary>
+        <div class="editor-advanced-body">
+          <label class="field">类型
+            <select id="f-type"></select>
+          </label>
+          <div id="type-fields"></div>
+          <label class="field">日期
+            <input id="f-date" type="date">
+          </label>
+          <label class="field">标签
+            <input id="f-tags" type="text" list="tag-history" placeholder="逗号分隔，如：光学, 生活篇" autocomplete="off">
+            <datalist id="tag-history"></datalist>
+          </label>
+          <!-- 文件夹上下文由顶部“保存到”统一管理；保留隐藏字段兼容原数据契约 -->
+          <input id="f-project" type="hidden" value="other">
+        </div>
+      </details>
+
+      <details class="editor-advanced">
+        <summary>AI注与概念标签</summary>
+        <div class="editor-advanced-body">
+          <div class="field">
+            <div class="field-head">
+              <span>AI注</span>
+              <button class="btn ghost small" id="ask-ai-btn" type="button">咨询 AI 并填入</button>
+            </div>
+            <textarea id="f-ai" rows="4" placeholder="与 AI 咨询的内容 / AI 的解答（可粘贴回复，或点「咨询 AI」）"></textarea>
+          </div>
+          <div class="field ai-settings">
+            <span>AI 服务设置（仅本机保存）</span>
+            <label class="field-sub">服务地址（OpenAI 兼容 /chat/completions）
+              <input id="ai-endpoint-input" type="url" inputmode="url" placeholder="https://…/v1/chat/completions" autocomplete="off">
+            </label>
+            <label class="field-sub">模型
+              <input id="ai-model-input" type="text" placeholder="deepseek-v4-flash" autocomplete="off">
+            </label>
+            <button class="btn ghost small" id="ai-settings-save" type="button">保存 AI 设置</button>
+          </div>
+          <div class="field" id="concept-field" hidden>
+            <span>概念标签（知识图谱）</span>
+            <div id="concept-select" class="concept-select"></div>
+            <p class="field-hint">从 graph.json 的知识图谱概念中选择，保存为 source=user</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="editor-advanced">
+        <summary>格式、图片版式与文档样式</summary>
+        <div class="editor-advanced-body">
+          <div class="field" id="media-editor-field" hidden>
+            <span>图片版式（非破坏性：原图不变）</span>
+            <div id="media-editor" class="media-editor"></div>
+            <p class="field-hint">旋转/宽度/对齐仅保存为 JSON 显示属性；导出 Markdown 时写入图片属性后缀。</p>
+          </div>
+
+          <label class="field">正文格式
+            <select id="f-format">
+              <option value="markdown">Markdown（推荐）</option>
+              <option value="html">HTML（沙箱预览/源码编辑）</option>
+              <option value="text">纯文本</option>
+            </select>
+            <span class="field-hint">导入的 md/html/txt 会以 JSON 记录管理；编辑不会修改原文件。</span>
+          </label>
+
+          <div class="field">
+            <span>正文样式（文档级白名单）</span>
+            <div class="doc-style-controls">
+              <label>字体 <select id="f-font"></select></label>
+              <label>对齐 <select id="f-align">
+                <option value="left">左</option><option value="center">居中</option>
+                <option value="right">右</option><option value="justify">两端</option>
+              </select></label>
+              <label>行距 <select id="f-line-height">
+                <option value="compact">紧凑</option><option value="normal">标准</option>
+                <option value="loose">宽松</option>
+              </select></label>
+            </div>
+            <span class="field-hint">只允许白名单字体/对齐/行距，PWA 与 PDF 同口径。</span>
+          </div>
+        </div>
+      </details>
+
+      <div class="editor-bottom-actions">
+        <button class="btn primary" id="save-btn" type="button" data-save>保存</button>
+        <button class="btn ghost" id="cancel-btn" type="button">取消</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- 文件夹选择面板 -->
+  <div id="folder-picker" class="type-manage" hidden>
+    <h2>保存到哪个文件夹？</h2>
+    <p class="muted">当前：<strong id="folder-picker-current">other</strong></p>
+    <label class="field">选择已有文件夹
+      <select id="folder-picker-select"></select>
+    </label>
+    <label class="field">或输入新文件夹（可写 父/子）
+      <input id="folder-picker-new" type="text" placeholder="如：项目A/文献" autocomplete="off">
+    </label>
+    <div class="editor-actions">
+      <button class="btn primary" id="folder-picker-apply" type="button">使用这个文件夹</button>
+      <button class="btn ghost" id="folder-picker-cancel" type="button">取消</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="file-warning.js"></script>
+  <script src="sw-register.js"></script>
+  <script src="panel-modal.js"></script>
+  <script src="types.js"></script>
+  <script type="module" src="editor.js?v=20261107a"></script>
+</body>
+</html>

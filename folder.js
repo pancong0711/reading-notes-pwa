@@ -1,13 +1,13 @@
-/* folder.js —— 单个文件夹页（需求 20260911 ⑤⑥）
+/* folder.js —— 单个文件夹页
  *
- * ?p=<路径>：显示该文件夹的 子文件夹卡片 + 直属笔记（跨类型）
- *   · 顶部「← 返回笔记目录」+ 面包屑（可点每级跳转）
- *   · 筛选：类型 chips + 搜索 + 日期区间（复用 folder-util.filterNotes）
- *   · 多选（☑ 多选 / 全选）→「移动到文件夹」（选已有 或 新建并移入）
- *   · 点笔记卡片 → note.html?id= 详情页
+ * 20261107 手机端改造：
+ *   · 「在此文件夹写笔记」始终可见，空文件夹/仅有子文件夹也有 CTA；
+ *   · 新建/编辑跳独立 editor.html，保存后回本文件夹并高亮新记录；
+ *   · 卡片操作收进「⋯」面板，避免一排小按钮误触；
+ *   · 支持在当前文件夹新建子文件夹。
  */
 import {
-  getAllNotes, getAllFolderPaths, moveNotesToFolder, getConceptCatalog, deleteNote, setNotePinned,
+  getAllNotes, getAllFolderPaths, moveNotesToFolder, deleteNote, setNotePinned, createFolder,
 } from './data.js';
 import {
   normalizeProject, splitPath, buildTree, directChildren, filterNotes, typeCounts,
@@ -15,6 +15,8 @@ import {
 
 const $ = (id) => document.getElementById(id);
 const P = new URLSearchParams(location.search).get('p') || '';
+const SAVED_ID = new URLSearchParams(location.search).get('saved') || '';
+let savedHandled = false;
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -39,7 +41,6 @@ function typeLabel(key) {
   return key;
 }
 
-/** ✎ 更新徽标（需求 20260922 A）：内容编辑时间比内容日期晚一天以上才显示「✎ MM-DD」 */
 function editBadge(n) {
   if (!n.updatedAt) return '';
   const base = n.date ? new Date(`${n.date}T00:00:00`).getTime() : NaN;
@@ -51,30 +52,32 @@ function editBadge(n) {
 }
 
 let notesCache = [];
-let conceptCatalog = [];
 let folderPath = normalizeProject(P);
 let filters = { types: [], q: '', dateFrom: '', dateTo: '' };
 let selecting = false;
-let moveTargets = [];   // 待移动的 id 列表（多选=selected，单篇=卡片「📁」按钮）
+let moveTargets = [];
+let actionTarget = null;
 const selected = new Set();
 
-/* ── 数据 ── */
+function returnUrl() {
+  return `folder.html?p=${encodeURIComponent(folderPath)}`;
+}
+
+function editorHref(id = '') {
+  const ret = encodeURIComponent(returnUrl());
+  return id
+    ? `editor.html?id=${encodeURIComponent(id)}&ret=${ret}`
+    : `editor.html?type=note&project=${encodeURIComponent(folderPath)}&ret=${ret}`;
+}
 
 async function loadData() {
   notesCache = await getAllNotes();
-  try {
-    const cat = await getConceptCatalog();
-    conceptCatalog = (cat && cat.concepts) || [];
-  } catch (e) { conceptCatalog = []; }
 }
-
-/* ── 渲染 ── */
 
 function renderHeader() {
   const segs = splitPath(folderPath);
   $('folder-title').textContent = `📁 ${segs[segs.length - 1] || 'other'}`;
-  // 面包屑：笔记 › 一级 › 二级…（可点）
-  const crumbs = [`<a href="folders.html">笔记</a>`];
+  const crumbs = ['<a href="folders.html">笔记</a>'];
   let acc = '';
   segs.forEach((s, i) => {
     acc = acc ? `${acc}/${s}` : s;
@@ -93,7 +96,6 @@ function renderTypeChips(notes) {
 }
 
 function visibleNotes() {
-  // 排序三键（需求 20260922 A）：置顶优先 → updatedAt 倒序 → 内容日期兜底（与 data.js getAllNotes 同口径）
   return filterNotes(notesCache, { ...filters, folder: folderPath, subtree: false })
     .sort((a, b) =>
       (!!b.pinned - !!a.pinned)
@@ -105,25 +107,21 @@ async function render() {
   renderHeader();
   renderTypeChips(filterNotes(notesCache, { folder: folderPath, subtree: false }));
 
-  // 子文件夹卡片
   const allPaths = new Set(notesCache.map((n) => normalizeProject(n.project)));
   const tree = buildTree([...allPaths, folderPath]);
   const kids = directChildren(tree, folderPath);
   const subWrap = $('sub-folders');
   subWrap.innerHTML = '';
-  if (kids.length) {
-    for (const kid of kids) {
-      const cnt = filterNotes(notesCache, { folder: kid.path, subtree: true }).length;
-      const card = document.createElement('article');
-      card.className = 'folder-card';
-      card.innerHTML = `<div class="folder-card-head"><span class="folder-icon">📁</span><h3>${esc(kid.name)}</h3></div>
-        <p class="folder-card-meta">含子层 ${cnt} 篇</p>`;
-      card.addEventListener('click', () => { location.href = `folder.html?p=${encodeURIComponent(kid.path)}`; });
-      subWrap.appendChild(card);
-    }
+  for (const kid of kids) {
+    const cnt = filterNotes(notesCache, { folder: kid.path, subtree: true }).length;
+    const card = document.createElement('article');
+    card.className = 'folder-card';
+    card.innerHTML = `<div class="folder-card-head"><span class="folder-icon">📁</span><h3>${esc(kid.name)}</h3></div>
+      <p class="folder-card-meta">含子层 ${cnt} 篇</p>`;
+    card.addEventListener('click', () => { location.href = `folder.html?p=${encodeURIComponent(kid.path)}`; });
+    subWrap.appendChild(card);
   }
 
-  // 笔记列表
   const list = visibleNotes();
   const listEl = $('note-list');
   listEl.innerHTML = '';
@@ -131,18 +129,10 @@ async function render() {
 
   for (const n of list) {
     const card = document.createElement('article');
-    card.className = 'note-card';
+    card.className = 'note-card' + (String(n.id) === String(SAVED_ID) ? ' saved-highlight' : '');
     card.dataset.id = n.id;
     if (selected.has(String(n.id))) card.classList.add('selected');
     const preview = String(n.content || n.readerNote || n.aiNote || '').replace(/\s+/g, ' ').slice(0, 90);
-    // 单篇操作行（需求 20260917 ②.2）：非多选模式常显；多选模式隐藏避免误触；⭐ 置顶（20260922 B）
-    const actions = !selecting ? `
-      <div class="card-actions">
-        <button class="btn ghost small" data-act="pin" type="button" title="${n.pinned ? '取消置顶' : '置顶'}">${n.pinned ? '⭐ 已置顶' : '☆ 置顶'}</button>
-        <button class="btn ghost small" data-act="edit" type="button" title="编辑">✏️ 编辑</button>
-        <button class="btn ghost small" data-act="move" type="button" title="移动">📁 移动</button>
-        <button class="btn ghost small danger" data-act="del" type="button" title="删除">🗑 删除</button>
-      </div>` : '';
     card.innerHTML = `
       ${selecting ? `<input type="checkbox" class="pick" data-pick="${esc(n.id)}" ${selected.has(String(n.id)) ? 'checked' : ''}>` : ''}
       <div class="note-thumb note-thumb-empty">${esc((window.NoteTypes && NoteTypes.getType(n.type || 'note') || {}).icon || '📝')}</div>
@@ -151,12 +141,14 @@ async function render() {
         <h3 class="note-title">${esc(n.title || '未命名')}</h3>
         ${preview ? `<p class="note-note">${esc(preview)}${String(n.content || '').length > 90 ? '…' : ''}</p>` : ''}
         ${Array.isArray(n.tags) && n.tags.length ? `<div class="note-tags">${n.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
-        ${actions}
+        <div class="card-actions">
+          <button class="btn ghost small" data-act="menu" type="button" aria-label="更多操作">⋯ 操作</button>
+        </div>
       </div>`;
     card.addEventListener('click', (e) => {
       const act = e.target.closest('[data-act]');
-      if (act) { e.stopPropagation(); handleCardAction(act.dataset.act, n); return; }   // 单篇操作按钮（需求 ②.2）
-      if (e.target.closest('[data-pick]')) return;   // 勾选不跳转（change 委托负责选中）
+      if (act) { e.stopPropagation(); openCardActionMenu(n); return; }
+      if (e.target.closest('[data-pick]')) return;
       if (selecting) {
         const id = String(n.id);
         if (selected.has(id)) selected.delete(id); else selected.add(id);
@@ -169,49 +161,63 @@ async function render() {
     listEl.appendChild(card);
   }
 
-  $('bulk-bar').hidden = list.length === 0 && !selecting ? true : false;
   updateBulkBar();
+  if (SAVED_ID && !savedHandled) {
+    savedHandled = true;
+    const savedCard = Array.from(listEl.querySelectorAll('.note-card')).find((c) => String(c.dataset.id) === String(SAVED_ID));
+    if (savedCard) {
+      savedCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => savedCard.classList.add('saved-highlight'), 60);
+      toast('已保存并返回当前文件夹');
+    }
+  }
 }
 
 function updateBulkBar() {
   $('select-toggle').textContent = selecting ? '✖ 退出多选' : '☑ 多选';
+  $('bulk-bar').hidden = !selecting;
   $('select-all').hidden = !selecting;
   $('move-btn').hidden = !selecting;
   $('delete-btn').hidden = !selecting;
   $('bulk-count').textContent = selecting ? `已选 ${selected.size} 篇` : '';
 }
 
-/* ── 单篇操作（需求 20260917 ②.2）：编辑 / 移动 / 删除 ── */
+/* ── 单篇操作面板 ── */
+function openCardActionMenu(n) {
+  actionTarget = n;
+  $('card-action-title').textContent = n.title || '未命名';
+  $('card-action-meta').textContent = `${typeLabel(n.type || 'note')} · ${n.date || '无日期'}`;
+  $('card-act-pin').textContent = n.pinned ? '⭐ 取消置顶' : '☆ 置顶';
+  $('card-action-panel').hidden = false;
+}
 
-async function handleCardAction(act, n) {
+async function runCardAction(act) {
+  const n = actionTarget;
+  if (!n) return;
+  $('card-action-panel').hidden = true;
   if (act === 'pin') {
-    // ⭐ 置顶/取消置顶（需求 20260922 B）：本端偏好，不推时钟、不入年表
     try {
       await setNotePinned([String(n.id)], !n.pinned);
       await loadData();
       await render();
       toast(n.pinned ? '已取消置顶' : '已置顶，将在列表顶部显示');
     } catch (e) { toast(`置顶操作失败：${e.message}`, 4200); }
-    return;
-  }
-  if (act === 'edit') {
-    location.href = `type.html?t=${encodeURIComponent(n.type || 'note')}&edit=${encodeURIComponent(n.id)}`;
-    return;
-  }
-  if (act === 'move') {
-    openMovePanel([String(n.id)]);   // 单篇版移动面板（复用 move-panel）
-    return;
-  }
-  if (act === 'del') {
+  } else if (act === 'edit') {
+    location.href = editorHref(n.id);
+  } else if (act === 'move') {
+    openMovePanel([String(n.id)]);
+  } else if (act === 'del') {
     if (!confirm(`删除笔记「${n.title || '未命名'}」？\n此操作不可撤销；其他终端上的同条笔记不受影响（删除不跨端同步）。`)) return;
-    deleteNote(String(n.id))
-      .then(async () => { toast('已删除'); await loadData(); await render(); })
-      .catch((e) => toast(`删除失败：${e.message}`, 4200));
+    try {
+      await deleteNote(String(n.id));
+      toast('已删除');
+      await loadData();
+      await render();
+    } catch (e) { toast(`删除失败：${e.message}`, 4200); }
   }
 }
 
-/* ── 多选 / 移动 ── */
-
+/* ── 多选/移动 ── */
 function toggleSelect() {
   selecting = !selecting;
   if (!selecting) selected.clear();
@@ -246,7 +252,7 @@ async function confirmMove() {
     const skipTxt = skipped ? `（${skipped} 篇已在目标文件夹，跳过）` : '';
     toast(`已移动 ${moved} 篇 → ${folder}${skipTxt}`);
     $('move-panel').hidden = true;
-    selected.clear();   // 20260917 决策：保持多选模式便于连续整理，仅清空选中
+    selected.clear();   // 保持多选模式便于连续整理，仅清空选中
     await loadData();
     await render();
   } catch (e) {
@@ -254,8 +260,21 @@ async function confirmMove() {
   }
 }
 
-/* ── 筛选事件 ── */
+async function createSubfolder() {
+  const raw = $('subfolder-path').value.trim();
+  try {
+    const rec = await createFolder(raw);
+    $('subfolder-panel').hidden = true;
+    $('subfolder-msg').textContent = '';
+    toast(`已创建文件夹：${rec.path}`);
+    await loadData();
+    await render();
+  } catch (e) {
+    $('subfolder-msg').textContent = `⚠️ ${e.message}`;
+  }
+}
 
+/* ── 事件 ── */
 $('type-chips').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-type-chip]');
   if (!btn) return;
@@ -282,18 +301,29 @@ $('filter-bar').addEventListener('click', (e) => {
 });
 
 $('back-btn').addEventListener('click', () => { location.href = 'folders.html'; });
-$('new-note-btn').addEventListener('click', () => {
-  // 当前文件夹内新建：预填 project，保存后回跳本文件夹（20260911 ⑦）
-  location.href = `type.html?t=note&new=1&project=${encodeURIComponent(folderPath)}&ret=${encodeURIComponent(folderPath)}`;
+$('new-note-btn').addEventListener('click', () => { location.href = editorHref(); });
+$('empty-new-btn').addEventListener('click', () => { location.href = editorHref(); });
+$('new-subfolder-btn').addEventListener('click', () => {
+  $('subfolder-path').value = `${folderPath}/`;
+  $('subfolder-msg').textContent = '';
+  $('subfolder-panel').hidden = false;
+  setTimeout(() => { $('subfolder-path').focus(); $('subfolder-path').select(); }, 50);
 });
+$('subfolder-save').addEventListener('click', createSubfolder);
+$('subfolder-cancel').addEventListener('click', () => { $('subfolder-panel').hidden = true; });
+$('subfolder-path').addEventListener('keydown', (e) => { if (e.key === 'Enter') createSubfolder(); });
+
 $('select-toggle').addEventListener('click', toggleSelect);
 $('select-all').addEventListener('click', selectAllVisible);
 $('move-btn').addEventListener('click', () => openMovePanel());
 $('delete-btn').addEventListener('click', bulkDelete);
 
-/* 多选修复（需求 20260917 ②根因）：勾选框此前未绑定任何事件、点击被卡片 click 吞掉，
- * selected 恒空 → "逐一点击显示 0 篇"。现用 change 委托：点勾选框=选中该篇，
- * 与点卡片空白处同语义（一处状态源 selected Set）。 */
+$('card-act-pin').addEventListener('click', () => runCardAction('pin'));
+$('card-act-edit').addEventListener('click', () => runCardAction('edit'));
+$('card-act-move').addEventListener('click', () => runCardAction('move'));
+$('card-act-delete').addEventListener('click', () => runCardAction('del'));
+$('card-action-cancel').addEventListener('click', () => { $('card-action-panel').hidden = true; });
+
 $('note-list').addEventListener('change', (e) => {
   const cb = e.target.closest('[data-pick]');
   if (!cb) return;
@@ -316,10 +346,10 @@ async function bulkDelete() {
     await render();
   } catch (e) { toast(`删除失败：${e.message}`, 4200); }
 }
+
 $('move-cancel').addEventListener('click', () => { $('move-panel').hidden = true; });
 $('move-confirm').addEventListener('click', confirmMove);
 
-/* ── 启动 ── */
 (async function init() {
   document.title = `${splitPath(folderPath).pop() || 'other'} · 笔记 · 读书笔记`;
   await loadData();
