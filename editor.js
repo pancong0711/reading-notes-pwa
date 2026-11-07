@@ -152,14 +152,33 @@ function safeReturnUrl() {
   }
 }
 
+function samePageUrl(a, b) {
+  try {
+    const ua = new URL(a, location.href);
+    const ub = new URL(b, location.href);
+    return ua.origin === ub.origin
+      && ua.pathname === ub.pathname
+      && ua.search === ub.search;
+  } catch (e) {
+    return false;
+  }
+}
+
 function navigateBack({ discard = false } = {}) {
   if (saving) return;
   if (dirty && !confirm('有未保存的修改，确定离开吗？')) return;
   if (discard) deleteEditorDraft(draftKey).catch(() => {});
   const ret = safeReturnUrl();
-  if (ret) location.href = ret;
-  else if (history.length > 1) history.back();
-  else location.href = 'folders.html';
+  // 正常从来源页进入编辑页时，document.referrer 就是来源页：后退即可原路返回，
+  // 不能再用 location.href 新增一条历史（否则会形成 详情↔编辑 循环）。
+  if (ret && document.referrer && samePageUrl(document.referrer, ret)) {
+    history.back();
+    return;
+  }
+  // 直接打开编辑页/旧链接跳转等没有可靠历史时，replace 兜底，同样不新增历史。
+  if (ret) { location.replace(ret); return; }
+  if (history.length > 1) { history.back(); return; }
+  location.replace('folders.html');
 }
 
 /* ── 图片压缩/照片管理 ── */

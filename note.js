@@ -19,6 +19,18 @@ function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/* 编辑入口：立即绑定，避免用户先看到按钮、监听却还没挂上导致“点编辑没反应”。
+ * 数据未就绪时按钮 disabled；getNoteById 成功后立即启用。 */
+let currentNote = null;
+const editBtn = $('edit-btn');
+editBtn.disabled = true;
+editBtn.addEventListener('click', () => {
+  if (!currentNote) return;
+  const id = String(currentNote.id);
+  const ret = `note.html?id=${encodeURIComponent(id)}`;
+  location.href = `editor.html?id=${encodeURIComponent(id)}&ret=${encodeURIComponent(ret)}`;
+});
+
 function toast(msg, ms = 3000) {
   const el = $('toast');
   el.textContent = msg;
@@ -86,12 +98,17 @@ async function load() {
 
   const note = await getNoteById(id);
   if (!note) {
+    editBtn.textContent = '不可编辑';
     $('note-title').textContent = '没有找到这条记录';
     $('note-missing').hidden = false;
     $('note-missing').textContent = '可能尚未导入：请在记录页点「⇄ 从电脑导入」，或导入迁移包。';
     return;
   }
 
+  // 关键：数据一到手就启用编辑入口，不等概念目录/正文/MathJax 全部渲染完。
+  currentNote = note;
+  editBtn.disabled = false;
+  editBtn.textContent = '✏️ 编辑';
   document.title = `${note.title || '笔记详情'} · 读书笔记`;
   $('note-title').textContent = note.title || '未命名';
   $('note-meta').innerHTML = metaLine(note);
@@ -111,11 +128,6 @@ async function load() {
   try { await typesetInto(body); } catch (e) { /* 公式排版失败不阻断 */ }
   attachImageDiagnostics(body);
   renderHistoryBlock(note);   // 📜 简要年表（需求 20260922 C）
-
-  $('edit-btn').addEventListener('click', () => {
-    const ret = `note.html?id=${encodeURIComponent(note.id)}`;
-    location.href = `editor.html?id=${encodeURIComponent(note.id)}&ret=${encodeURIComponent(ret)}`;
-  });
 }
 
 $('back-btn').addEventListener('click', () => {
