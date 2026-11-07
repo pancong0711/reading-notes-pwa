@@ -9,7 +9,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v43';   // v43: 20261107 独立编辑页 + 相机/相册分离 + 草稿 + 文件夹入口修复
+var CACHE_NAME = 'reading-notes-v44';   // v44: 20261107 编辑入口首次无响应 + 返回历史循环修复（含 v43 独立编辑页全量）
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [
@@ -28,7 +28,7 @@ var CORE_ASSETS = [
   './types.js',
   './type.html',
   './type.js',
-  './editor.html',   // v43：独立编辑页（新建/编辑统一入口）
+  './editor.html',   // 独立编辑页（新建/编辑统一入口；v44 随编辑入口/返回修复一起换新缓存）
   './editor.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
