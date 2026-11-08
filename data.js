@@ -235,6 +235,8 @@ function normalizeNote(raw, index, ctx) {
     meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {},   // 类型特有字段（memo: done/due 等，旧兼容路径）
     typeData: normalizeTypeData(raw.typeData),   // 各类型字段快照（切换类型不丢）
     extensions: normalizeExtensions(raw.extensions),   // 未知扩展字段（标量）
+    importHistory: Array.isArray(raw.importHistory)
+      ? raw.importHistory.filter((e) => e && typeof e === 'object').slice(-20) : [],   // 导入过程审计（FIFO≤20）
     createdAt: raw.createdAt || Date.now(),
     // 导入路径（ctx.tsFallback）锚定包 exportedAt：导入是搬运、不是编辑（需求 20260922
     // 时间戳语义修复）；仅无 ctx 的本地常规新增才兜底当前时间。

@@ -9,6 +9,7 @@
  */
 import { getNoteById, getConceptCatalog } from './data.js';
 import { renderNoteDetailInto } from './note-detail.js';
+import { sourceBadge } from './source-import.js';
 import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
 
 const $ = (id) => document.getElementById(id);
@@ -55,6 +56,8 @@ function metaLine(n) {
   if (n.book) parts.push(`《${esc(n.book)}》`);
   if (n.pages) parts.push(`第 ${esc(n.pages)} 页`);
   if (Array.isArray(n.tags) && n.tags.length) parts.push(n.tags.map((t) => `#${esc(t)}`).join(' '));
+  const badge = sourceBadge(n);
+  if (badge) parts.push(badge);
   return parts.join(' ｜ ');
 }
 

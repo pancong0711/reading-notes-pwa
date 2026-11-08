@@ -10,9 +10,10 @@
  */
 import {
   getAllNotes, getAllBooks, getConceptCatalog, exportNotePackage, summarizePackage,
-  diffNotePackage, mergeNotePackage, getAllTags, renameTag, deleteTag, addNote,
+  diffNotePackage, mergeNotePackage, getAllTags, renameTag, deleteTag, addNote, putImageFile,
 } from './data.js';
-import { buildImportedNote, isImportableSource, hashSourceText, hasRelativeHtmlImages } from './source-import.js';
+import { buildImportedNote, isImportableSource, hashSourceText, hashSourceBytes, hasRelativeHtmlImages } from './source-import.js';
+import { inferMediaKind, mediaExtension } from './media-util.js';
 import {
   filterNotesByScope, scopeLabel, buildPrintHtml, buildMarkdownDraft,
 } from './print-export.js';
@@ -121,6 +122,10 @@ const PANELS_HTML = `
         <label class="strategy"><input type="radio" name="import-strategy" value="new"> 仅新增<span class="muted">（不覆盖任何现有记录）</span></label>
         <label class="strategy"><input type="radio" name="import-strategy" value="replace"> 完整替换<span class="muted">（以导入包为准清空重建）</span></label>
       </div>
+      <label class="field">可选：导入后归入文件夹
+        <input id="import-override-project" type="text" placeholder="留空则保留包内 project">
+        <span class="field-hint">仅对新增记录或本端 project 为空的记录生效；已有本端归属仍按合并策略保留。</span>
+      </label>
       <p class="muted">导入前会自动下载一份当前数据的备份文件。</p>
       <div class="strategy-actions">
         <button class="btn primary" id="import-confirm" type="button">确认导入</button>
@@ -131,7 +136,7 @@ const PANELS_HTML = `
     <!-- 数据中枢（⚙️ 数据）：聚合数据管理入口（20260911 回归修复） -->
     <div id="data-hub" class="type-manage" hidden>
       <h2>⚙️ 数据</h2>
-      <p class="muted">导入 / 备份 / 导出与整理入口集中在此；个人数据只在本机与你的设备间流转。<br>「📥 导入文件」支持 JSON 笔记包与 md/html/txt 文档；多格式文档导入后以 JSON 记录管理，原文件不会被修改。DOCX/DOC 请在电脑端用 CLI <code>note import-file</code> 转换后同步（PWA 不内置 Office 转换器）。</p>
+      <p class="muted">导入 / 备份 / 导出与整理入口集中在此；个人数据只在本机与你的设备间流转。<br>「📥 导入文件」支持 JSON 笔记包、md/html/txt 内容笔记，以及 docx/pptx/xlsx/pdf 等附件笔记。附件型文档会把原件复制进本机媒体仓；Office 转换预览请在电脑端用 CLI 生成。</p>
       <div class="data-hub-actions">
         <button class="btn primary" id="data-sync" type="button">⇄ 从服务器导入</button>
         <button class="btn ghost" id="data-import" type="button">📥 导入文件</button>
@@ -142,7 +147,7 @@ const PANELS_HTML = `
       </div>
       <label class="field">多格式文档导入到文件夹
         <input id="import-project" type="text" placeholder="other（可输入 父/子 层级）">
-        <span class="field-hint">仅对 md/html/txt 文件导入生效；JSON 包沿用包内 project。</span>
+        <span class="field-hint">对 md/html/txt 与 docx/pptx/xlsx/pdf 附件笔记生效；JSON 包默认沿用包内 project。</span>
       </label>
       <p class="muted" id="data-hub-status"></p>
       <div class="editor-actions">
@@ -150,7 +155,7 @@ const PANELS_HTML = `
       </div>
     </div>
 
-    <input type="file" id="import-file" accept=".json,.md,.markdown,.html,.htm,.txt,.docx,.doc,application/json,text/markdown,text/html,text/plain" multiple hidden>
+    <input type="file" id="import-file" accept=".json,.md,.markdown,.html,.htm,.txt,.pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.csv,.odt,.ods,.odp,.rtf,.zip,.epub,application/json,text/markdown,text/html,text/plain,application/pdf" multiple hidden>
 `;
 
 const FIELD_KEYS = ['book', 'pages', 'done', 'due'];
@@ -324,6 +329,52 @@ async function syncFromCli() {
   await openImportDialog(pkg, '从电脑导入');
 }
 
+const ATTACHMENT_SOURCE_RE = /\.(pdf|docx?|pptx?|xlsx?|csv|odt|ods|odp|rtf|zip|epub)$/i;
+
+function randomImportName(filename, mime) {
+  const ext = mediaExtension(inferMediaKind(filename, mime), mime, filename);
+  const rand = Math.random().toString(36).slice(2, 10);
+  return `assets/import-${Date.now()}-${rand}.${ext}`;
+}
+
+function importHistoryEntry(sha, filename, method, mode, result = 'created') {
+  return {
+    at: new Date().toISOString(), method, sourceName: filename, sha256: sha,
+    mode, result, warnings: [],
+  };
+}
+
+async function buildAttachmentNote(file, project, sha) {
+  const path = randomImportName(file.name, file.type);
+  await putImageFile(path, file);
+  const title = String(file.name || '未命名附件').replace(/\.[^.]+$/, '') || '未命名附件';
+  const label = String(file.name || '附件').replace(/[\[\]\r\n]+/g, ' ').trim() || '附件';
+  const kind = String(file.name || '').split('.').pop().toLowerCase() || 'file';
+  const importedAt = new Date().toISOString();
+  return {
+    type: 'general',
+    title,
+    date: todayStr(),
+    project,
+    contentFormat: 'markdown',
+    content: `![${label}](${path}){kind=file caption=${encodeURIComponent('原始文件')}}`,
+    media: [{
+      kind: 'file', src: path, name: file.name || label, alt: file.name || label,
+      mime: file.type || '', size: file.size || 0, caption: '原始文件',
+      widthPercent: 100, rotate: 0, align: 'center',
+    }],
+    source: {
+      origin: 'imported-file', kind, originalName: file.name || '',
+      sha256: sha, size: file.size || 0, importedAt,
+      importMethod: 'pwa-file', importMode: 'attachment',
+      originalPreserved: true, originalAttachment: path,
+      conversion: { attempted: false, engine: 'none', status: 'skipped', outputFormat: '', warnings: [] },
+    },
+    importHistory: [importHistoryEntry(sha, file.name || '', 'pwa-file', 'attachment')],
+    sync: { contentOrigin: 'json', lastImportedAt: importedAt, state: 'clean' },
+  };
+}
+
 async function doImport(fileOrFiles) {
   const files = Array.isArray(fileOrFiles) ? fileOrFiles
     : (fileOrFiles && typeof fileOrFiles.length === 'number' ? [...fileOrFiles] : [fileOrFiles]);
@@ -346,8 +397,9 @@ async function doImport(fileOrFiles) {
     }
     return;
   }
-  // md/html/txt：直接生成统一 JSON 记录；原文件只读，不保存路径依赖
+  // md/html/txt → 内容笔记；docx/pptx/xlsx/pdf 等 → 附件笔记（原件复制进本机媒体仓）
   let imported = 0;
+  let attached = 0;
   let skipped = 0;
   const warnings = [];
   let existing = [];
@@ -355,26 +407,39 @@ async function doImport(fileOrFiles) {
   const knownHashes = new Set(existing.map((n) => n && n.source && n.source.sha256).filter(Boolean));
   const project = ($('import-project')?.value || '').trim() || (host.getImportProject && host.getImportProject()) || 'other';
   for (const f of all) {
-    if (/\.(docx?|doc)$/i.test(f.name || '')) {
-      warnings.push(`${f.name}: DOCX/DOC 需先在电脑端用 CLI note import-file 转换，再同步 JSON`);
-      skipped++;
-      continue;
-    }
-    if (!isImportableSource(f.name)) { skipped++; continue; }
     try {
-      const text = await f.text();
-      const note = buildImportedNote({ filename: f.name, text, project, type: 'general' });
-      if (note.contentFormat === 'html' && hasRelativeHtmlImages(text)) {
-        warnings.push(`${f.name}: HTML 相对图片未自动导入，请在电脑端用 CLI 导入以复制图片`);
+      if (isImportableSource(f.name)) {
+        const text = await f.text();
+        const note = buildImportedNote({ filename: f.name, text, project, type: 'general' });
+        if (note.contentFormat === 'html' && hasRelativeHtmlImages(text)) {
+          warnings.push(`${f.name}: HTML 相对图片未自动导入，请在电脑端用 CLI 导入以复制图片`);
+        }
+        const sha = await hashSourceText(text);
+        if (knownHashes.has(sha)) { skipped++; continue; }
+        const importedAt = new Date().toISOString();
+        note.source = {
+          ...(note.source || {}),
+          origin: 'imported-file', importMethod: 'pwa-file', importMode: 'native-content',
+          sha256: sha, size: new Blob([text]).size, encoding: 'utf-8', importedAt,
+          conversion: { attempted: false, engine: 'none', status: 'skipped', outputFormat: '', warnings: [] },
+        };
+        note.importHistory = [importHistoryEntry(sha, f.name, 'pwa-file', 'native-content')];
+        await addNote(note);
+        knownHashes.add(sha);
+        imported++;
+        continue;
       }
-      const sha = await hashSourceText(text);
-      if (knownHashes.has(sha)) { skipped++; continue; }
-      note.source.sha256 = sha;
-      note.source.size = new Blob([text]).size;
-      note.source.encoding = 'utf-8';
-      await addNote(note);
-      knownHashes.add(sha);
-      imported++;
+      if (ATTACHMENT_SOURCE_RE.test(f.name || '')) {
+        const bytes = await f.arrayBuffer();
+        const sha = await hashSourceBytes(bytes);
+        if (knownHashes.has(sha)) { skipped++; continue; }
+        const note = await buildAttachmentNote(f, project, sha);
+        await addNote(note);
+        knownHashes.add(sha);
+        attached++;
+        continue;
+      }
+      skipped++;
     } catch (e) {
       warnings.push(`${f.name}: ${e.message}`);
       skipped++;
@@ -382,7 +447,7 @@ async function doImport(fileOrFiles) {
   }
   await host.onChange?.();
   const extra = warnings.length ? `；${warnings.slice(0, 2).join('；')}` : '';
-  toast(`已导入 ${imported} 篇多格式文档${skipped ? `，跳过 ${skipped}` : ''}${extra}`, 5200);
+  toast(`已导入 ${imported} 篇内容笔记、${attached} 篇附件笔记${skipped ? `，跳过 ${skipped}` : ''}${extra}`, 6200);
 }
 
 /** 确认导入：备份 → 按所选策略应用 → 刷新 */
@@ -392,6 +457,11 @@ async function confirmImport() {
   const strategy = document.querySelector('input[name="import-strategy"]:checked')?.value || 'merge';
   try {
     await downloadBackup();  // 导入前自动备份
+    const overrideProject = String($('import-override-project')?.value || '').trim();
+    if (overrideProject && Array.isArray(pkg.notes)) {
+      // 只覆盖包内 project；merge 策略下已有本端归属仍按既有规则保留。
+      pkg.notes = pkg.notes.map((n) => ({ ...n, project: overrideProject }));
+    }
     const { applied, catalogAdded, catalogDomainsAdded, catalogTotal } = await mergeNotePackage(pkg, strategy);
     await host.onChange?.();
     const kept = strategy === 'merge' ? `，保留本端更新 ${fmtCount(diff.localNewer.length)} 条` : '';

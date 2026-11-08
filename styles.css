@@ -925,7 +925,7 @@ main {
 }
 .note-media-audio, .note-media-video { display: block; margin: 10px auto; max-width: 100%; }
 .note-media .note-media-audio { width: 100%; }
-.note-media .note-media-video { width: 100%; height: auto; background: #000; border-radius: 8px; }
+.note-media .note-media-video { width: 100%; height: auto; max-height: 70vh; background: #000; border-radius: 8px; transform-origin: center center; }
 .media-attachment-label { font-size: .9em; color: var(--muted, #786f62); margin-bottom: 4px; }
 .note-attachment { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--line, #e6dfd2); border-radius: 8px; background: #fbf8f1; color: var(--ink, #2f2a22); text-decoration: none; overflow-wrap: anywhere; }
 .media-file-thumb { width: 104px; height: 84px; display: flex; align-items: center; justify-content: center; font-size: 34px; border-radius: 8px; background: #f6f1e7; }

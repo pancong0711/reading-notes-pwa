@@ -316,7 +316,7 @@ export function renderMediaFigure(src, media, { href = '', className = 'note-med
   const m = normalizeMediaItem(media || { src: safeSrc });
   const kind = m.kind;
   const width = m.widthPercent;
-  const rotate = kind === 'image' ? m.rotate : 0;
+  const rotate = (kind === 'image' || kind === 'video') ? m.rotate : 0;
   const align = m.align;
   const label = m.name || m.alt || (kind === 'image' ? '笔记图片' : `${mediaKindLabel(kind)}附件`);
   const boxStyle = `text-align:${align};${rotate === 90 || rotate === 270 ? 'min-height:20vh;' : ''}`;
@@ -329,9 +329,10 @@ export function renderMediaFigure(src, media, { href = '', className = 'note-med
       + `data-align="${align}" style="${boxStyle}"><div class="media-attachment-label">🎙 ${escAttr(label)}</div>${audio}${cap}</figure>`;
   }
   if (kind === 'video') {
+    const videoStyle = [`width:${width}%`, 'max-width:100%', rotate ? `transform:rotate(${rotate}deg)` : ''].filter(Boolean).join(';');
     const video = `<video class="note-media-video" controls playsinline preload="metadata" src="${escAttr(safeSrc)}" `
-      + `data-path="${escAttr(safeSrc)}" style="width:${width}%;max-width:100%"></video>`;
-    return `<figure class="${escAttr(className)} note-media-${kind}" data-kind="${kind}" data-width="${width}" `
+      + `data-path="${escAttr(safeSrc)}" style="${videoStyle}"></video>`;
+    return `<figure class="${escAttr(className)} note-media-${kind}" data-kind="${kind}" data-rotate="${rotate}" data-width="${width}" `
       + `data-align="${align}" style="${boxStyle}"><div class="media-attachment-label">🎬 ${escAttr(label)}</div>${video}${cap}</figure>`;
   }
   if (kind === 'file') {

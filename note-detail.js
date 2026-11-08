@@ -16,6 +16,7 @@ import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
 import { renderHtmlFrame, sanitizeHtmlForPrint } from './html-doc.js';
 import { renderMediaFigure, mediaForSrc, normalizeMediaList } from './media-util.js';
 import { styleToCss } from './doc-style.js';
+import { sourceBadge } from './source-import.js';
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -25,6 +26,20 @@ function esc(s) {
 
 function section(title, html) {
   return `<div class="note-sec"><h4>${esc(title)}</h4>${html}</div>`;
+}
+
+function sourceHtml(note) {
+  const src = (note && note.source) || {};
+  const badge = sourceBadge(note);
+  if (!badge && !src.originalName) return '';
+  const bits = [];
+  if (src.originalName) bits.push(`原件：${esc(src.originalName)}`);
+  if (src.importMethod) bits.push(`方式：${esc(src.importMethod)}`);
+  if (src.importedAt) bits.push(`导入：${esc(String(src.importedAt).slice(0, 16).replace('T', ' '))}`);
+  if (src.importMode === 'attachment') bits.push('原件已复制到本机媒体仓');
+  const conv = src.conversion || {};
+  if (conv.status === 'failed') bits.push('转换预览失败');
+  return `<div class="note-sec note-source"><h4>来源</h4><p>${esc(badge || '📎 外部导入')}${bits.length ? ' · ' + bits.join(' · ') : ''}</p></div>`;
 }
 
 function tagsHtml(tags) {
@@ -92,6 +107,8 @@ export function renderNoteDetail(note, catalogById, opts = {}) {
   const parts = [];
   if (note.pages) parts.push(`<div class="note-sec"><h4>页码</h4><p>${esc(note.pages)}</p></div>`);
   if (note.meta && note.meta.due) parts.push(`<div class="note-sec"><h4>截止</h4><p>${esc(note.meta.due)}</p></div>`);
+  const source = sourceHtml(note);
+  if (source) parts.push(source);
   const tags = tagsHtml(note.tags);
   if (tags) parts.push(tags);
   const concepts = conceptsHtml(note.concepts, catalogById);

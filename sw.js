@@ -9,7 +9,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v49';   // v49: 20261108 修复移动端相册多选退化/FileList 清空（含 v48 全量）
+var CACHE_NAME = 'reading-notes-v50';   // v50: 20261108 文档导入策略/来源徽标/附件笔记 + 视频 90° 旋转（含 v49 全量）
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [

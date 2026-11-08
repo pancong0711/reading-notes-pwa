@@ -164,21 +164,46 @@ export function buildImportedNote({ filename, text, project = 'other', type = 'g
   };
 }
 
+/** 字节 hash：浏览器优先 SHA-256；无 crypto 时退化为 FNV-1a。 */
+export async function hashSourceBytes(bytes) {
+  try {
+    if (globalThis.crypto && globalThis.crypto.subtle) {
+      const buf = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+      return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch (e) { /* fallback */ }
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < arr.length; i++) {
+    h ^= arr[i];
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return 'fnv1a-' + h.toString(16).padStart(8, '0');
+}
+
 /** 文本 hash：浏览器优先 SHA-256；测试/无 crypto 时退化为 FNV-1a。 */
 export async function hashSourceText(text) {
   const s = String(text == null ? '' : text);
   try {
     if (globalThis.crypto && globalThis.crypto.subtle && globalThis.TextEncoder) {
-      const buf = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
-      return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+      return await hashSourceBytes(new TextEncoder().encode(s));
     }
   } catch (e) { /* fallback */ }
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return 'fnv1a-' + h.toString(16).padStart(8, '0');
+  return hashSourceBytes(new Uint8Array([...s].map((c) => c.codePointAt(0) & 0xff)));
+}
+
+/** 导入来源徽标（供详情页/卡片展示；不写入 tags）。 */
+export function sourceBadge(note) {
+  const src = (note && note.source) || {};
+  const kind = String(src.kind || '').toLowerCase();
+  const label = ({
+    html: '🌐 HTML 导入', htm: '🌐 HTML 导入', docx: '📄 DOCX 附件', doc: '📄 DOC 附件',
+    pptx: '📽 PPTX 附件', ppt: '📽 PPT 附件', xlsx: '📊 XLSX 附件', xls: '📊 XLS 附件',
+    pdf: '📕 PDF 附件', md: '📝 Markdown 导入', markdown: '📝 Markdown 导入', txt: '📄 文本导入',
+  })[kind] || '';
+  if (label) return label;
+  if (src.origin === 'imported-package' || src.importedFrom) return '📦 笔记包导入';
+  return '';
 }
 
 
@@ -194,4 +219,4 @@ export function hasRelativeHtmlImages(raw) {
   return false;
 }
 
-export default { detectSourceFormat, parseFrontmatter, buildImportedNote, hashSourceText, titleFromHtml, titleFromMarkdown, hasRelativeHtmlImages };
+export default { detectSourceFormat, parseFrontmatter, buildImportedNote, hashSourceBytes, hashSourceText, sourceBadge, titleFromHtml, titleFromMarkdown, hasRelativeHtmlImages };

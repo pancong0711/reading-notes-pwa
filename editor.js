@@ -773,7 +773,7 @@ function renderMediaEditor() {
     if (m.kind === 'image') preview = `<img class="media-thumb" src="${esc(src)}" alt="${esc(label)}">`;
     else if (m.kind === 'audio') preview = `<audio class="media-thumb-audio" controls preload="metadata" src="${esc(src)}"></audio>`;
     else if (m.kind === 'video') preview = `<video class="media-thumb-video" controls playsinline preload="metadata" src="${esc(src)}"></video>`;
-    const rotateControls = m.kind === 'image'
+    const rotateControls = (m.kind === 'image' || m.kind === 'video')
       ? `<button type="button" class="btn ghost small" data-media-act="rotate-left" title="向左旋转 90°">⟲</button>
          <button type="button" class="btn ghost small" data-media-act="rotate-right" title="向右旋转 90°">⟳</button>`
       : '';
