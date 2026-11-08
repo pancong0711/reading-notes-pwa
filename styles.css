@@ -1060,6 +1060,16 @@ a.tag:hover {
 }
 .note-page-meta { font-size: 13px; color: #8a7a5c; margin: 0; }
 
+/* ── 分享菜单 ── */
+.share-switch { position: relative; margin-left: auto; }
+.share-pop { left: auto; right: 0; min-width: 250px; max-width: 86vw; }
+.share-pop [data-share-kind] {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  border: none; background: none; text-align: left; padding: 9px 10px;
+  border-radius: 6px; font: inherit; color: var(--ink); cursor: pointer;
+}
+.share-pop [data-share-kind]:hover { background: var(--accent-soft); }
+
 /* ── 阅读字号档位（Aa popover；需求 20260905-批次三）── */
 .fs-switch {
   position: relative;
@@ -1318,6 +1328,17 @@ a.tag:hover {
 .orphan-field-row span { min-width: 0; overflow-wrap: anywhere; }
 .photo-thumb-actions { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .photo-thumb figcaption { align-items: flex-start; }
+
+/* ── 附件笔记中的 Excel/CSV 表格预览 ── */
+.spreadsheet-preview .sheet-preview { margin: 8px 0; border: 1px solid var(--line, #e6dfd2); border-radius: 8px; background: #fffdf8; }
+.spreadsheet-preview .sheet-preview > summary,
+.spreadsheet-preview .sheet-tab > summary { cursor: pointer; padding: 8px 10px; font-weight: 600; overflow-wrap: anywhere; }
+.spreadsheet-preview .sheet-tab { margin: 6px 8px 10px; border-top: 1px dashed var(--line, #e6dfd2); }
+.sheet-table-wrap { max-height: 360px; overflow: auto; border: 1px solid var(--line, #e6dfd2); border-radius: 6px; margin: 4px 0 8px; -webkit-overflow-scrolling: touch; }
+.sheet-table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 13px; }
+.sheet-table th, .sheet-table td { border: 1px solid #ddd; padding: 4px 8px; text-align: left; white-space: nowrap; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+.sheet-table th { position: sticky; top: 0; background: #f6f1e7; z-index: 1; }
+.sheet-truncated { font-size: 11px; margin: 2px 0 8px; }
 
 /* ── 富文本工具栏与预览（md-toolbar / md-editor）── */
 .md-editor { position: relative; }

@@ -10,6 +10,8 @@
 import { getNoteById, getConceptCatalog } from './data.js';
 import { renderNoteDetailInto } from './note-detail.js';
 import { sourceBadge } from './source-import.js';
+import { shareNoteAsHtml, shareNoteAsJson } from './share.js';
+import { renderSpreadsheetPreviews } from './spreadsheet-preview.js';
 import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
 
 const $ = (id) => document.getElementById(id);
@@ -23,7 +25,10 @@ function esc(s) {
 /* 编辑入口：立即绑定，避免用户先看到按钮、监听却还没挂上导致“点编辑没反应”。
  * 数据未就绪时按钮 disabled；getNoteById 成功后立即启用。 */
 let currentNote = null;
+let currentCatalogById = {};
 const editBtn = $('edit-btn');
+const shareBtn = $('share-btn');
+const sharePop = $('share-pop');
 editBtn.disabled = true;
 editBtn.addEventListener('click', () => {
   if (!currentNote) return;
@@ -31,6 +36,33 @@ editBtn.addEventListener('click', () => {
   const ret = `note.html?id=${encodeURIComponent(id)}`;
   location.href = `editor.html?id=${encodeURIComponent(id)}&ret=${encodeURIComponent(ret)}`;
 });
+
+function toggleSharePop(force) {
+  sharePop.hidden = typeof force === 'boolean' ? !force : !sharePop.hidden;
+  shareBtn.setAttribute('aria-expanded', String(!sharePop.hidden));
+}
+
+async function doShare(kind) {
+  if (!currentNote) return;
+  toggleSharePop(false);
+  shareBtn.disabled = true;
+  const oldText = shareBtn.textContent;
+  shareBtn.textContent = '生成中…';
+  try {
+    const result = kind === 'json'
+      ? await shareNoteAsJson(currentNote)
+      : await shareNoteAsHtml(currentNote, currentCatalogById);
+    if (result.mode === 'shared') toast('已打开系统分享面板');
+    else if (result.mode === 'downloaded') toast('当前浏览器不支持文件分享，已下载分享文件');
+    else toast('已取消分享');
+  } catch (e) {
+    console.error('[share]', e);
+    toast(`分享失败：${e.message}`, 5200);
+  } finally {
+    shareBtn.disabled = false;
+    shareBtn.textContent = oldText;
+  }
+}
 
 function toast(msg, ms = 3000) {
   const el = $('toast');
@@ -112,6 +144,7 @@ async function load() {
   currentNote = note;
   editBtn.disabled = false;
   editBtn.textContent = '✏️ 编辑';
+  shareBtn.disabled = false;
   document.title = `${note.title || '笔记详情'} · 读书笔记`;
   $('note-title').textContent = note.title || '未命名';
   $('note-meta').innerHTML = metaLine(note);
@@ -125,17 +158,33 @@ async function load() {
     const catalog = await getConceptCatalog();
     ((catalog && catalog.concepts) || []).forEach((c) => { catalogById[c.id] = c; });
   } catch (e) { /* 目录缺失时按 id 显示 */ }
+  currentCatalogById = catalogById;
 
   const body = $('note-body');
   await renderNoteDetailInto(body, note, catalogById);
   try { await typesetInto(body); } catch (e) { /* 公式排版失败不阻断 */ }
   attachImageDiagnostics(body);
+  try { await renderSpreadsheetPreviews(body, note); } catch (e) { console.warn('[spreadsheet]', e); }
   renderHistoryBlock(note);   // 📜 简要年表（需求 20260922 C）
 }
 
 $('back-btn').addEventListener('click', () => {
   if (history.length > 1) history.back();
   else location.href = 'folders.html';
+});
+
+shareBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!currentNote) return;
+  toggleSharePop();
+});
+sharePop.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-share-kind]');
+  if (!btn) return;
+  doShare(btn.getAttribute('data-share-kind'));
+});
+document.addEventListener('click', (e) => {
+  if (!sharePop.hidden && !e.target.closest('.share-switch')) toggleSharePop(false);
 });
 
 /* ── 阅读字号档位（需求 20260905-批次三：四档 popover）──

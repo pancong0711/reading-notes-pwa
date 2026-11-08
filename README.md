@@ -145,6 +145,8 @@
 - 🔠 阅读字号四档（存本机）＋ 📖 书页模式（双页翻页）
 - 🗂️ 类型注册表 JSON 导入/导出，可与电脑 CLI 双向同步
 - 🖨 导出/生成：打印草稿（另存 PDF）/ 下载书稿 markdown
+- ↗ **一键分享**：详情页可分享自包含 HTML（图片/媒体 base64 内嵌）或 JSON 包（媒体内嵌）；优先调用系统分享面板，不支持时下载文件
+- 📊 **Excel/CSV 预览**：附件笔记中的 xlsx/xls/csv/ods 可直接在 PWA 里以表格查看，最多 10 个工作表、每表 200×40 单元格
 - 📴 离线可用（Service Worker 缓存；页脚显示缓存版本号）
 
 ---
@@ -210,4 +212,4 @@ reading-notes type import note-types.json
 
 ## License
 
-[MIT](./LICENSE) © 2026 pancong0711 —— 代码可自由使用/修改/分发（保留版权声明即可）；`vendor/d3.min.js` 为 D3.js（BSD-3-Clause，版权归其作者）；`vendor/mathjax3/` 为 MathJax（Apache-2.0，版权归其作者）；`vendor/heic2any.min.js` 为 heic2any（MIT，版权归其作者，内含 libheif/WASM）。
+[MIT](./LICENSE) © 2026 pancong0711 —— 代码可自由使用/修改/分发（保留版权声明即可）；`vendor/d3.min.js` 为 D3.js（BSD-3-Clause，版权归其作者）；`vendor/mathjax3/` 为 MathJax（Apache-2.0，版权归其作者）；`vendor/heic2any.min.js` 为 heic2any（MIT，版权归其作者，内含 libheif/WASM）；`vendor/xlsx.full.min.js` 为 SheetJS Community Edition（Apache-2.0，版权归其作者）。

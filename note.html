@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>笔记详情 · 读书笔记</title>
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20261107a">
+  <link rel="stylesheet" href="styles.css?v=20261108a">
   <script src="reading-font.js"></script>
 </head>
 <body>
@@ -21,6 +21,14 @@
       <!-- 顶栏：返回 + 编辑 -->
       <div class="note-page-top">
         <button class="btn ghost small" id="back-btn" type="button">← 返回</button>
+        <div class="share-switch">
+          <button class="btn ghost small" id="share-btn" type="button" disabled aria-haspopup="true" aria-expanded="false">↗ 分享</button>
+          <div class="fs-pop share-pop" id="share-pop" role="menu" hidden>
+            <button type="button" role="menuitem" data-share-kind="html">分享 HTML<span class="muted">（图片 base64 内嵌，适合跨 App 打开）</span></button>
+            <button type="button" role="menuitem" data-share-kind="json">分享 JSON<span class="muted">（图片内嵌，适合在本 App 导入）</span></button>
+            <p class="muted fs-hint">优先调用系统分享面板；不支持文件分享的浏览器会下载文件。微信/钉钉等是否出现由系统分享面板决定。</p>
+          </div>
+        </div>
         <button class="btn primary small" id="edit-btn" type="button" disabled>加载中…</button>
       </div>
 
@@ -79,6 +87,6 @@
   <script src="file-warning.js"></script>
   <script src="sw-register.js"></script>
   <script src="types.js"></script>
-  <script type="module" src="note.js?v=20261024"></script>
+  <script type="module" src="note.js?v=20261108a"></script>
 </body>
 </html>
