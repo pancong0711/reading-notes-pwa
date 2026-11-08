@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#c9a96e">
   <title>编辑笔记 · 读书笔记</title>
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20261107f">
+  <link rel="stylesheet" href="styles.css?v=20261107g">
   <script src="reading-font.js"></script>
 </head>
 <body class="editor-body">
@@ -52,7 +52,7 @@
           <button class="btn ghost" id="media-file-btn" type="button">📂 本机文件（可多选）</button>
         </div>
         <p class="field-hint audio-record-status" id="audio-record-status" hidden></p>
-        <div class="photo-strip" id="photo-strip"></div>
+        <div class="media-unified-strip" id="photo-strip"></div>
         <p class="field-hint" id="photo-hint">相册/本机文件支持多选；系统相机每次拍照一张，可连续点按。图片压缩、HEIC 自动转 JPEG。</p>
       </section>
 
@@ -133,14 +133,8 @@
       </details>
 
       <details class="editor-advanced">
-        <summary>格式、媒体旋转与文档样式</summary>
+        <summary>格式与文档样式</summary>
         <div class="editor-advanced-body">
-          <div class="field" id="media-editor-field" hidden>
-            <span>媒体版式（非破坏性：原文件不变）</span>
-            <div id="media-editor" class="media-editor"></div>
-            <p class="field-hint">图片/视频可在此或上方缩略图卡片直接左右旋转 90°；音频/文档显示为受控播放器或附件链接。</p>
-          </div>
-
           <label class="field">正文格式
             <select id="f-format">
               <option value="markdown">Markdown（推荐）</option>
@@ -200,6 +194,6 @@
   <script src="sw-register.js"></script>
   <script src="panel-modal.js"></script>
   <script src="types.js"></script>
-  <script type="module" src="editor.js?v=20261107f"></script>
+  <script type="module" src="editor.js?v=20261107g"></script>
 </body>
 </html>

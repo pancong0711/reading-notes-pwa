@@ -9,7 +9,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v51';   // v51: 20261108 缩略图卡片直接旋转图片/视频（含 v50 全量）
+var CACHE_NAME = 'reading-notes-v52';   // v52: 20261108 合并媒体缩略图为一处上方媒体面板（含 v51 全量）
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [

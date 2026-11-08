@@ -80,8 +80,6 @@ const els = {
   fProject: $('f-project'),
   fContent: $('f-content'),
   fFormat: $('f-format'),
-  mediaEditorField: $('media-editor-field'),
-  mediaEditor: $('media-editor'),
   fFont: $('f-font'),
   fAlign: $('f-align'),
   fLineHeight: $('f-line-height'),
@@ -316,7 +314,7 @@ function mediaIcon(kind) {
 
 function renderMediaStrip() {
   if (!mediaSources.length) {
-    els.photoStrip.innerHTML = '<p class="muted photo-empty">还没有媒体附件。</p>';
+    els.photoStrip.innerHTML = '<p class="muted photo-empty">还没有媒体附件。可从相册、本机文件、相机或麦克风添加。</p>';
   } else {
     els.photoStrip.innerHTML = mediaSources.map((src, i) => {
       const m = editorMedia[i] || normalizeMediaItem({ src, kind: inferMediaKind(src) }, i);
@@ -324,32 +322,41 @@ function renderMediaStrip() {
       const inBody = markdownHasImageSrc(els.fContent?.value || '', src);
       const srcView = safeMediaSrc(displayMediaSrc(src));
       const preview = m.kind === 'image' && srcView
-        ? `<img src="${esc(srcView)}" alt="${esc(label)}">`
-        : `<div class="media-file-thumb" aria-hidden="true">${mediaIcon(m.kind)}</div>`;
+        ? `<img class="media-card-img" src="${esc(srcView)}" alt="${esc(label)}">`
+        : `<div class="media-file-thumb" aria-hidden="true">${esc(mediaKindLabel(m.kind))}</div>`;
       const rotateButtons = (m.kind === 'image' || m.kind === 'video')
-        ? `<button type="button" class="btn ghost small" data-media-rotate="left" data-media-rotate-idx="${i}" title="向左旋转 90°">⟲</button>
-           <button type="button" class="btn ghost small" data-media-rotate="right" data-media-rotate-idx="${i}" title="向右旋转 90°">⟳</button>`
+        ? `<button type="button" class="btn ghost small" data-media-rotate="left" data-media-rotate-idx="${i}">左转90°</button>
+           <button type="button" class="btn ghost small" data-media-rotate="right" data-media-rotate-idx="${i}">右转90°</button>
+           <button type="button" class="btn ghost small" data-media-reset="${i}">重置</button>`
+        : '';
+      const layoutControls = (m.kind === 'image' || m.kind === 'video')
+        ? `<label>宽度 <select data-media-field="width" data-media-idx="${i}">
+             ${[25, 50, 75, 100].map((w) => `<option value="${w}"${m.widthPercent === w ? ' selected' : ''}>${w}%</option>`).join('')}
+           </select></label>
+           <label>对齐 <select data-media-field="align" data-media-idx="${i}">
+             ${[['left', '左'], ['center', '中'], ['right', '右']].map(([v, l]) => `<option value="${v}"${m.align === v ? ' selected' : ''}>${l}</option>`).join('')}
+           </select></label>`
         : '';
       return `
-      <figure class="photo-thumb media-thumb-card" data-media-idx="${i}">
-        ${preview}
-        <figcaption>
-          <span title="${esc(label)}">${mediaIcon(m.kind)} ${esc(label)}</span>
-          <span class="photo-thumb-actions">
-            ${rotateButtons}
+      <article class="media-card media-card-${esc(m.kind)}" data-media-idx="${i}">
+        <div class="media-card-preview">${preview}</div>
+        <div class="media-card-body">
+          <div class="media-card-name"><strong>${esc(mediaKindLabel(m.kind))}</strong> · ${esc(label)}${m.size ? ` <span class="muted">(${Math.max(1, Math.round(m.size / 1024))} KB)</span>` : ''}</div>
+          <div class="media-card-controls">
+            ${rotateButtons}${layoutControls}
             <button type="button" class="btn ghost small" data-media-insert="${i}" ${inBody ? 'disabled' : ''}>${inBody ? '已在正文' : '插入正文'}</button>
-            <button type="button" class="btn ghost small danger" data-media-remove="${i}" aria-label="移除${esc(mediaKindLabel(m.kind))} ${i + 1}">移除</button>
-          </span>
-        </figcaption>
-      </figure>`;
+            <button type="button" class="btn ghost small danger" data-media-remove="${i}">移除</button>
+          </div>
+          <input class="media-caption" data-media-field="caption" data-media-idx="${i}" value="${esc(m.caption || '')}" placeholder="说明/图注（显示在附件下方，可选）">
+        </div>
+      </article>`;
     }).join('');
   }
   if (els.photoHint) {
     els.photoHint.textContent = mediaSources.length
-      ? `已添加 ${mediaSources.length} 个媒体附件；新附件会自动插入光标处，旧附件可点「插入正文」。`
+      ? `已添加 ${mediaSources.length} 个媒体附件；图片/视频可直接旋转；新附件自动插入光标处。`
       : '图片压缩保存；音频/视频/文档按原文件保存。可从相册、本机文件、相机或麦克风添加。';
   }
-  renderMediaEditor();
 }
 
 function generateMediaPath(kind, mime, name) {
@@ -778,64 +785,28 @@ function mediaPreviewSrc(m) {
   return safeMediaSrc(displayMediaSrc(raw));
 }
 
-function renderMediaEditor() {
-  if (!els.mediaEditor || !els.mediaEditorField) return;
-  const visible = editorMedia.filter((m) => mediaPreviewSrc(m));
-  els.mediaEditorField.hidden = !visible.length;
-  els.mediaEditor.innerHTML = visible.map((m, i) => {
-    const idx = editorMedia.indexOf(m);
-    const src = mediaPreviewSrc(m);
-    const label = m.name || m.alt || sourceLabel(i, m.kind);
-    let preview = `<div class="media-file-thumb" aria-hidden="true">${mediaIcon(m.kind)}</div>`;
-    if (m.kind === 'image') preview = `<img class="media-thumb" src="${esc(src)}" alt="${esc(label)}">`;
-    else if (m.kind === 'audio') preview = `<audio class="media-thumb-audio" controls preload="metadata" src="${esc(src)}"></audio>`;
-    else if (m.kind === 'video') preview = `<video class="media-thumb-video" controls playsinline preload="metadata" src="${esc(src)}"></video>`;
-    const rotateControls = (m.kind === 'image' || m.kind === 'video')
-      ? `<button type="button" class="btn ghost small" data-media-act="rotate-left" title="向左旋转 90°">⟲</button>
-         <button type="button" class="btn ghost small" data-media-act="rotate-right" title="向右旋转 90°">⟳</button>`
-      : '';
-    const layoutControls = (m.kind === 'image' || m.kind === 'video')
-      ? `<label>宽度 <select data-media-field="width">
-            ${[25, 50, 75, 100].map((w) => `<option value="${w}"${m.widthPercent === w ? ' selected' : ''}>${w}%</option>`).join('')}
-          </select></label>
-          <label>对齐 <select data-media-field="align">
-            ${[['left', '左'], ['center', '中'], ['right', '右']].map(([v, l]) => `<option value="${v}"${m.align === v ? ' selected' : ''}>${l}</option>`).join('')}
-          </select></label>`
-      : '';
-    return `<div class="media-row media-row-${esc(m.kind)}" data-media-idx="${idx}">
-      ${preview}
-      <div class="media-meta">
-        <div class="media-name">${mediaIcon(m.kind)} ${esc(label)} <span class="muted">(${esc(mediaKindLabel(m.kind))}${m.size ? ` · ${Math.max(1, Math.round(m.size / 1024))} KB` : ''})</span></div>
-        <div class="media-controls">
-          ${rotateControls}${layoutControls}
-          <button type="button" class="btn ghost small" data-media-act="reset">重置版式</button>
-        </div>
-        <input class="media-caption" data-media-field="caption" value="${esc(m.caption || '')}" placeholder="说明/图注（显示在附件下方，可选）">
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function onMediaEditorEvent(e) {
+function onUnifiedMediaChange(e) {
   const row = e.target.closest('[data-media-idx]');
   if (!row) return;
-  const idx = Number(row.getAttribute('data-media-idx'));
-  const m = editorMedia[idx];
-  if (!m) return;
-  const act = e.target.getAttribute('data-media-act');
-  if (act === 'rotate-left') m.rotate = ((Number(m.rotate || 0) + 270) % 360);
-  else if (act === 'rotate-right') m.rotate = ((Number(m.rotate || 0) + 90) % 360);
-  else if (act === 'reset') { m.rotate = 0; m.widthPercent = 100; m.align = 'center'; m.caption = ''; }
-  else {
-    const field = e.target.getAttribute('data-media-field');
-    if (!field) return;
-    if (field === 'width') m.widthPercent = Number(e.target.value) || 100;
-    else if (field === 'align') m.align = e.target.value || 'center';
-    else if (field === 'caption') m.caption = e.target.value || '';
-  }
+  const m = editorMedia[Number(row.getAttribute('data-media-idx'))];
+  const field = e.target.getAttribute('data-media-field');
+  if (!m || !field || field === 'caption') return;
+  if (field === 'width') m.widthPercent = Number(e.target.value) || 100;
+  else if (field === 'align') m.align = e.target.value || 'center';
   syncMediaAttrsToContent();
-  renderMediaEditor();
+  renderMediaStrip();
   markDirty();
+}
+
+function onUnifiedMediaCaptionInput(e) {
+  if (e.target.getAttribute('data-media-field') !== 'caption') return;
+  const row = e.target.closest('[data-media-idx]');
+  if (!row) return;
+  const m = editorMedia[Number(row.getAttribute('data-media-idx'))];
+  if (!m) return;
+  m.caption = e.target.value || '';
+  syncMediaAttrsToContent();
+  markDirty();   // 输入期间不重绘，避免光标/焦点丢失
 }
 
 /* ── 文档样式 / 格式 ── */
@@ -1302,11 +1273,22 @@ els.photoStrip.addEventListener('click', (e) => {
     rotateMedia(rotateBtn.getAttribute('data-media-rotate-idx'), rotateBtn.getAttribute('data-media-rotate'));
     return;
   }
+  const resetBtn = e.target.closest('[data-media-reset]');
+  if (resetBtn) {
+    const m = editorMedia[Number(resetBtn.getAttribute('data-media-reset'))];
+    if (m) {
+      m.rotate = 0; m.widthPercent = 100; m.align = 'center'; m.caption = '';
+      syncMediaAttrsToContent(); renderMediaStrip(); markDirty(); toast('已重置媒体版式');
+    }
+    return;
+  }
   const removeBtn = e.target.closest('[data-media-remove]');
   if (removeBtn) { removeMedia(removeBtn.getAttribute('data-media-remove')); return; }
   const insertBtn = e.target.closest('[data-media-insert]');
   if (insertBtn) insertMediaAtCursor(insertBtn.getAttribute('data-media-insert'));
 });
+els.photoStrip.addEventListener('change', onUnifiedMediaChange);
+els.photoStrip.addEventListener('input', onUnifiedMediaCaptionInput);
 
 els.fType.addEventListener('change', () => {
   captureActiveTypeFields();
@@ -1376,20 +1358,6 @@ if (els.fFormat) els.fFormat.addEventListener('change', () => { syncFormatUi(); 
     markDirty();
     if (els.mdPreview && !els.mdPreview.hidden) renderPreviewContent();
   });
-});
-if (els.mediaEditor) els.mediaEditor.addEventListener('click', onMediaEditorEvent);
-if (els.mediaEditor) els.mediaEditor.addEventListener('change', onMediaEditorEvent);
-if (els.mediaEditor) els.mediaEditor.addEventListener('input', (e) => {
-  if (e.target.getAttribute('data-media-field') !== 'caption') return;
-  const row = e.target.closest('[data-media-idx]');
-  if (!row) return;
-  const m = editorMedia[Number(row.getAttribute('data-media-idx'))];
-  if (m) {
-    m.caption = e.target.value || '';
-    m.alt = m.caption || m.alt || '图片';
-    syncMediaAttrsToContent();
-    markDirty();
-  }   // 输入期间不重绘，避免光标/焦点丢失
 });
 els.mdPreviewToggle.addEventListener('click', toggleMdPreview);
 els.askAiBtn.addEventListener('click', async () => {
