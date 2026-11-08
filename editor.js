@@ -326,12 +326,17 @@ function renderMediaStrip() {
       const preview = m.kind === 'image' && srcView
         ? `<img src="${esc(srcView)}" alt="${esc(label)}">`
         : `<div class="media-file-thumb" aria-hidden="true">${mediaIcon(m.kind)}</div>`;
+      const rotateButtons = (m.kind === 'image' || m.kind === 'video')
+        ? `<button type="button" class="btn ghost small" data-media-rotate="left" data-media-rotate-idx="${i}" title="向左旋转 90°">⟲</button>
+           <button type="button" class="btn ghost small" data-media-rotate="right" data-media-rotate-idx="${i}" title="向右旋转 90°">⟳</button>`
+        : '';
       return `
       <figure class="photo-thumb media-thumb-card" data-media-idx="${i}">
         ${preview}
         <figcaption>
           <span title="${esc(label)}">${mediaIcon(m.kind)} ${esc(label)}</span>
           <span class="photo-thumb-actions">
+            ${rotateButtons}
             <button type="button" class="btn ghost small" data-media-insert="${i}" ${inBody ? 'disabled' : ''}>${inBody ? '已在正文' : '插入正文'}</button>
             <button type="button" class="btn ghost small danger" data-media-remove="${i}" aria-label="移除${esc(mediaKindLabel(m.kind))} ${i + 1}">移除</button>
           </span>
@@ -449,6 +454,18 @@ async function addMediaFiles(files) {
     console.error('[editor] 媒体处理失败:', failures);
     toast(`部分文件失败：${failures.slice(0, 2).join('；')}`, 6200);
   }
+}
+
+function rotateMedia(index, direction) {
+  const i = Number(index);
+  const m = editorMedia[i];
+  if (!m || (m.kind !== 'image' && m.kind !== 'video')) return;
+  const delta = direction === 'left' ? 270 : 90;
+  m.rotate = (Number(m.rotate || 0) + delta) % 360;
+  syncMediaAttrsToContent();
+  renderMediaStrip();
+  markDirty();
+  toast(`已${direction === 'left' ? '向左' : '向右'}旋转 90°`);
 }
 
 function insertMediaAtCursor(index) {
@@ -1280,6 +1297,11 @@ els.mediaFileInput.addEventListener('change', async () => {
   await addMediaFiles(consumeInputFiles(els.mediaFileInput));
 });
 els.photoStrip.addEventListener('click', (e) => {
+  const rotateBtn = e.target.closest('[data-media-rotate]');
+  if (rotateBtn) {
+    rotateMedia(rotateBtn.getAttribute('data-media-rotate-idx'), rotateBtn.getAttribute('data-media-rotate'));
+    return;
+  }
   const removeBtn = e.target.closest('[data-media-remove]');
   if (removeBtn) { removeMedia(removeBtn.getAttribute('data-media-remove')); return; }
   const insertBtn = e.target.closest('[data-media-insert]');
