@@ -9,7 +9,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v47';   // v47: 20261107 多媒体附件（图片/音频/视频/文件）+ 完整本机文件入口（含 v46 全量）
+var CACHE_NAME = 'reading-notes-v48';   // v48: 20261107 多媒体多选 + HEIC/HEIF 本地转 JPEG（含 v47 全量）
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [
@@ -61,6 +61,7 @@ var CORE_ASSETS = [
   './doc-style.js',   // v41：文档级样式白名单（字体/对齐/行距）
   './vendor/mathjax3/mathjax-boot.js',   // v16：公式启动与定点排版辅助
   './vendor/mathjax3/tex-svg.js',   // v16：MathJax v3 离线组件（2.1MB 单文件，SW 预缓存后离线可用）
+  './vendor/heic2any.min.js',   // v48：HEIC/HEIF → JPEG 本地转换（WASM，按需加载/预缓存）
   './vendor/markdown-lite.js',   // v14：本地 markdown 受控渲染器（无外链）
   './graph.json',
     './concepts.html',

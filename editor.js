@@ -32,7 +32,7 @@ import {
   mediaFromMarkdown, mergeMediaLists, normalizeMediaItem, normalizeMediaList,
   applyMediaAttrsToMarkdown, safeMediaSrc,
   insertMarkdownImagesAtCursor, removeMarkdownImageBySrc, markdownHasImageSrc,
-  inferMediaKind, mediaExtension, mediaKindLabel, isAllowedMediaFile,
+  inferMediaKind, mediaExtension, mediaKindLabel, isAllowedMediaFile, isHeicFile,
 } from './media-util.js';
 import { normalizeDocStyle, styleToCss, FONT_OPTIONS } from './doc-style.js';
 
@@ -209,31 +209,73 @@ function navigateBack({ discard = false } = {}) {
   location.replace('folders.html');
 }
 
-/* ── 图片压缩/照片管理 ── */
-function compressImage(file, maxSide = 1600, quality = 0.86) {
+/* ── 图片压缩 / HEIC 兼容转换 / 媒体管理 ── */
+function loadImageFromBlob(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const img = new Image();
-      img.onload = () => {
-        const w = img.naturalWidth || img.width;
-        const h = img.naturalHeight || img.height;
-        const scale = Math.min(1, maxSide / Math.max(w, h));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(w * scale));
-        canvas.height = Math.max(1, Math.round(h * scale));
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#fff';                 // JPEG 无透明通道，先铺白底避免截图黑底
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
+      img.onload = () => resolve(img);
       img.onerror = () => reject(new Error('图片解析失败（可能是浏览器不支持的格式）'));
       img.src = reader.result;
     };
     reader.onerror = () => reject(new Error('文件读取失败'));
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(blob);
   });
+}
+
+function imageToJpegDataUrl(img, maxSide = 1600, quality = 0.86) {
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  const scale = Math.min(1, maxSide / Math.max(w, h));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(w * scale));
+  canvas.height = Math.max(1, Math.round(h * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';                 // JPEG 无透明通道，先铺白底避免截图黑底
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
+let _heic2anyPromise = null;
+function loadHeic2Any() {
+  if (typeof window !== 'undefined' && typeof window.heic2any === 'function') return Promise.resolve(window.heic2any);
+  if (_heic2anyPromise) return _heic2anyPromise;
+  _heic2anyPromise = new Promise((resolve, reject) => {
+    const src = new URL('./vendor/heic2any.min.js', import.meta.url).href;
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => {
+      if (typeof window.heic2any === 'function') resolve(window.heic2any);
+      else reject(new Error('HEIC 转换组件加载后不可用'));
+    };
+    script.onerror = () => reject(new Error('HEIC 转换组件加载失败'));
+    document.head.appendChild(script);
+  });
+  return _heic2anyPromise;
+}
+
+async function heicToJpegBlob(file, quality = 0.86) {
+  const heic2any = await loadHeic2Any();
+  const out = await heic2any({ blob: file, toType: 'image/jpeg', quality, multiple: false });
+  const blob = Array.isArray(out) ? out[0] : out;
+  if (!blob || !String(blob.type || '').startsWith('image/')) throw new Error('HEIC 转换结果不是图片');
+  return blob;
+}
+
+async function compressImage(file, maxSide = 1600, quality = 0.86) {
+  try {
+    const img = await loadImageFromBlob(file);
+    return imageToJpegDataUrl(img, maxSide, quality);
+  } catch (err) {
+    if (!isHeicFile(file)) throw err;
+    // 鸿蒙/部分 Android 浏览器不能原生解码 HEIC/HEIF：本地 WASM 转 JPEG 后再压缩。
+    const jpegBlob = await heicToJpegBlob(file, quality);
+    const img = await loadImageFromBlob(jpegBlob);
+    return imageToJpegDataUrl(img, maxSide, quality);
+  }
 }
 
 function uniqueSrcs(list) {
@@ -323,16 +365,19 @@ async function prepareMediaFile(file) {
   if (file.size > MAX_MEDIA_BYTES) throw new Error(`文件超过 ${Math.round(MAX_MEDIA_BYTES / 1024 / 1024)}MB 上限`);
   if (!isAllowedMediaFile(file)) throw new Error('不支持该文件类型（拒绝 HTML/SVG/脚本等可执行内容）');
   const kind = inferMediaKind(file.name, file.type);
-  const path = generateMediaPath(kind, file.type, file.name);
+  let path = '';
   let mime = String(file.type || '');
   let size = Number(file.size || 0);
   if (kind === 'image') {
+    // HEIC/HEIF 统一转 JPEG 后落仓，路径也固定为 .jpg，确保所有渲染端可用。
     const dataUrl = await compressImage(file);
     mime = 'image/jpeg';
+    path = generateMediaPath('image', mime, file.name);
     await putImageFile(path, dataUrl);
     mediaPreviewMap.set(path, dataUrl);
     size = Math.round((dataUrl.length * 3) / 4);
   } else {
+    path = generateMediaPath(kind, file.type, file.name);
     await putImageFile(path, file);
     if (kind === 'audio' || kind === 'video') {
       const url = objectUrlFor(file);

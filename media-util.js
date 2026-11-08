@@ -17,6 +17,7 @@ export const MEDIA_KINDS = ['image', 'audio', 'video', 'file'];
 
 const EXT_BY_MIME = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/avif': 'avif',
+  'image/heic': 'heic', 'image/heif': 'heif',
   'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a',
   'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/aac': 'aac',
   'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/x-m4v': 'm4v',
@@ -36,7 +37,7 @@ const EXT_BY_MIME = {
 const SAFE_EXT = new Set(Object.values(EXT_BY_MIME));
 // 可作为附件保存的类型（不含可执行同源脚本/HTML/SVG/XML）
 const ALLOWED_ATTACHMENT_EXTS = new Set([
-  'jpg','jpeg','png','gif','webp','bmp','avif',
+  'jpg','jpeg','png','gif','webp','bmp','avif','heic','heif',
   'mp3','wav','m4a','aac','ogg','oga','opus','webm',
   'mp4','m4v','mov','pdf','doc','docx','ppt','pptx','xls','xlsx',
   'txt','md','csv','zip','epub','rtf','odt','ods','odp',
@@ -50,6 +51,13 @@ function hasUnsafeActiveExt(value) {
   // 站内受控页面（如 note.html?id=）可作为图片/链接跳转目标；但 /assets/ 下上传的 HTML 必须拒绝。
   if (/\.html?$/.test(p)) return /(^|\/)assets\//.test(p);
   return UNSAFE_ACTIVE_EXT_RE.test(p);
+}
+
+export function isHeicFile(file) {
+  if (!file) return false;
+  const name = String(file.name || '').toLowerCase();
+  const type = String(file.type || '').toLowerCase();
+  return type === 'image/heic' || type === 'image/heif' || /\.(heic|heif)$/.test(name);
 }
 
 export function isAllowedMediaFile(file) {
@@ -68,7 +76,7 @@ export function inferMediaKind(src, mime = '') {
   if (mt.startsWith('audio/')) return 'audio';
   if (mt.startsWith('video/')) return 'video';
   const ext = String(src || '').split(/[?#]/)[0].split('.').pop().toLowerCase();
-  if (['jpg','jpeg','png','gif','webp','bmp','avif','svg'].includes(ext)) return 'image';
+  if (['jpg','jpeg','png','gif','webp','bmp','avif','heic','heif','svg'].includes(ext)) return 'image';
   if (['mp3','wav','m4a','aac','ogg','oga','opus','webm'].includes(ext)) return 'audio';
   if (['mp4','m4v','mov','avi','mkv','webm'].includes(ext)) return 'video';
   return 'file';
@@ -351,7 +359,7 @@ export default {
   mediaFromMarkdown, mergeMediaLists, applyMediaAttrsToMarkdown,
   mediaForSrc, renderMediaFigure, clampWidth, normalizeRotate, normalizeAlign,
   inferMediaKind, mediaExtension, mediaKindLabel, MEDIA_KINDS,
-  isAllowedMediaFile, ALLOWED_ATTACHMENT_EXTS,
+  isAllowedMediaFile, isHeicFile, ALLOWED_ATTACHMENT_EXTS,
   insertMarkdownImagesAtCursor, removeMarkdownImageBySrc, markdownHasImageSrc,
   safeMediaSrc, safeMediaHref,
 };
