@@ -66,11 +66,11 @@ export function sanitizeHtmlForPrint(raw) {
   if (typeof DOMParser === 'undefined') {
     return `<pre class="note-text">${String(src).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}</pre>`;
   }
-  const ALLOWED = new Set(['P','BR','DIV','SPAN','H1','H2','H3','H4','H5','H6','UL','OL','LI','BLOCKQUOTE','PRE','CODE','STRONG','B','EM','I','U','S','DEL','MARK','A','IMG','TABLE','THEAD','TBODY','TFOOT','TR','TH','TD','HR','FIGURE','FIGCAPTION','SUP','SUB','SMALL']);
+  const ALLOWED = new Set(['P','BR','DIV','SPAN','H1','H2','H3','H4','H5','H6','UL','OL','LI','BLOCKQUOTE','PRE','CODE','STRONG','B','EM','I','U','S','DEL','MARK','A','IMG','AUDIO','VIDEO','SOURCE','TABLE','THEAD','TBODY','TFOOT','TR','TH','TD','HR','FIGURE','FIGCAPTION','SUP','SUB','SMALL']);
   const DROP = new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','FORM','BASE','META','LINK','TEMPLATE','NOSCRIPT']);
-  const ALLOWED_ATTR = new Set(['href','src','alt','title','class','style','colspan','rowspan','width','height','data-width','data-rotate','data-align']);
+  const ALLOWED_ATTR = new Set(['href','src','alt','title','class','style','colspan','rowspan','width','height','data-width','data-rotate','data-align','controls','preload','playsinline','poster','type','download']);
   const ALLOWED_STYLE_PROPS = new Set([
-    'font-family','font-size','font-weight','text-align','text-decoration','line-height',
+    'font-family','font-size','font-weight','text-align','text-decoration','line-height','text-indent',
     'width','max-width','min-width','height','max-height','min-height',
     'transform','transform-origin','margin','margin-top','margin-right','margin-bottom','margin-left',
     'padding','padding-top','padding-right','padding-bottom','padding-left',

@@ -9,7 +9,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v45';   // v45: 20261107 渲染 XSS/媒体 URL 安全加固 + 图片默认宽度修复（含 v43/v44 全量）
+var CACHE_NAME = 'reading-notes-v47';   // v47: 20261107 多媒体附件（图片/音频/视频/文件）+ 完整本机文件入口（含 v46 全量）
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [
@@ -57,6 +57,7 @@ var CORE_ASSETS = [
   './html-doc.js',   // v39：HTML 笔记 sandbox 安全预览
   './source-import.js',   // v39：md/html/txt 统一 JSON 导入解析
   './media-util.js',   // v40：图片非破坏性版式纯函数（width/rotate/align）
+  './type-fields.js',   // v46：类型字段快照/无关字段纯函数
   './doc-style.js',   // v41：文档级样式白名单（字体/对齐/行距）
   './vendor/mathjax3/mathjax-boot.js',   // v16：公式启动与定点排版辅助
   './vendor/mathjax3/tex-svg.js',   // v16：MathJax v3 离线组件（2.1MB 单文件，SW 预缓存后离线可用）
@@ -82,7 +83,7 @@ var IMAGE_DB = 'reading-notes';
 /* 不带版本号打开：避免与页面侧 data.js/diary.js 的 DB_VERSION 漂移（低于现存版本会抛 VersionError）。
  * 升级/建仓由页面侧负责；SW 仅在缺 store 时补建（见 openImageDb）。 */
 var IMAGE_STORE = 'image_store';
-var IMAGE_RE = /\.(jpg|jpeg|png|gif|webp)$/i;
+var ASSET_MEDIA_RE = /\.(jpg|jpeg|png|gif|webp|bmp|avif|mp3|wav|m4a|aac|ogg|oga|opus|webm|mp4|m4v|mov|pdf|docx?|pptx?|xlsx?|txt|md|csv|zip|epub)$/i;
 
 function openImageDb() {
   return new Promise(function (resolve, reject) {
@@ -107,6 +108,39 @@ function idbGetImage(path) {
       req.onerror = function () { reject(req.error); };
     });
   }).catch(function () { return null; });
+}
+
+var PASSIVE_MIME_BY_EXT = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+  webp: 'image/webp', bmp: 'image/bmp', avif: 'image/avif',
+  mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac',
+  ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg',
+  webm: '', mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime',
+};
+
+/**
+ * 媒体仓响应必须收口 content-type：
+ * - 被动媒体（图片/音频/视频）→ 已知 MIME，允许页面内联播放；
+ * - PDF/Office/压缩包/未知类型 → application/octet-stream + attachment，避免同源主动 HTML 执行。
+ */
+function responseForStoredMedia(blob, path) {
+  var clean = decodeURIComponent(String(path || '')).split(/[?#]/)[0].toLowerCase();
+  var ext = clean.indexOf('.') !== -1 ? clean.split('.').pop() : '';
+  var mime = PASSIVE_MIME_BY_EXT[ext] || '';
+  if (ext === 'webm') {
+    var bt = String(blob && blob.type || '').toLowerCase();
+    mime = bt.startsWith('audio/') ? 'audio/webm' : (bt.startsWith('video/') ? 'video/webm' : 'application/octet-stream');
+  }
+  var headers = {
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'no-store',
+  };
+  if (!mime) {
+    mime = 'application/octet-stream';
+    headers['Content-Disposition'] = 'attachment';
+  }
+  headers['Content-Type'] = mime;
+  return new Response(blob, { headers: headers });
 }
 
 function idbPutImage(path, blob) {
@@ -161,14 +195,25 @@ self.addEventListener('fetch', function (event) {
 
   var url = new URL(request.url);
 
-  // 图片自包含：/assets/* 先查 image_store（迁移包导入/历史回填），未命中走网络并回填
-  if (IMAGE_RE.test(url.pathname) && url.pathname.indexOf('/assets/') !== -1) {
+  // 媒体/附件自包含：/assets/* 先查 Blob 仓（迁移包导入/历史回填），未命中走网络并回填。
+  // 兼容两种 key：'assets/foo.jpg'（新写入/迁移包）与 'foo.jpg'（旧历史数据）。
+  if (url.pathname.indexOf('/assets/') !== -1) {
+    var ai = url.pathname.indexOf('/assets/');
+    var fullAssetPath = decodeURIComponent(url.pathname.slice(ai + 1));       // assets/foo.jpg
+    var baseAssetPath = decodeURIComponent(url.pathname.slice(ai + '/assets/'.length)); // foo.jpg
     event.respondWith(
-      idbGetImage(decodeURIComponent(url.pathname.split('/assets/')[1])).then(function (blob) {
-        if (blob) return new Response(blob, { headers: { 'Content-Type': blob.type || 'image/jpeg' } });
+      idbGetImage(fullAssetPath).then(function (blob) {
+        return blob || idbGetImage(baseAssetPath);
+      }).then(function (blob) {
+        if (blob) return responseForStoredMedia(blob, fullAssetPath);
         return fetch(request).then(function (response) {
           if (response && response.ok) {
-            response.clone().blob().then(function (b) { idbPutImage(decodeURIComponent(url.pathname.split('/assets/')[1]), b); });
+            response.clone().blob().then(function (b) {
+              idbPutImage(fullAssetPath, b);
+            }).catch(function () {});
+            return response.clone().blob().then(function (b) {
+              return responseForStoredMedia(b, fullAssetPath);
+            }).catch(function () { return response; });
           }
           return response;
         });

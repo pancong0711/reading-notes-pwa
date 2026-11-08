@@ -10,7 +10,7 @@
 import { renderNoteDetail } from './note-detail.js';
 
 /* 内置类型显示名（文件名与打印头用；自定义类型由调用方传入 label） */
-const TYPE_LABELS = { note: '阅读笔记', diary: '日记', log: '日志', memo: '备忘' };
+const TYPE_LABELS = { general: '一般笔记', note: '阅读笔记', diary: '日记', log: '日志', memo: '备忘' };
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -133,6 +133,8 @@ const PRINT_CSS = `
   .note-detail .note-html-print th, .note-detail .note-html-print td { border: 1px solid #ddd; padding: 4px 8px; }
   .note-detail figure.note-media img.note-media-img { display: inline-block; max-width: 100%; height: auto; transform-origin: center center; }
   .note-detail .note-media .img-caption { font-size: 9pt; color: #888; text-align: center; margin-top: 4px; }
+  .note-detail .note-media-audio, .note-detail .note-media-video { max-width: 100%; }
+  .note-detail .note-attachment { display: inline-block; color: #555; text-decoration: underline; }
   .note-tags .tag { display: inline-block; font-size: 9pt; color: #b8860b;
                     border: 1px solid #e6d9b8; border-radius: 10px; padding: 1px 8px;
                     margin: 0 4px 4px 0; }

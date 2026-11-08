@@ -42,6 +42,33 @@ function escAttr(s) {
   return String(s).replace(/["'<>]/g, (c) => ESC[c]);
 }
 
+const INLINE_SIZE = { small: '0.85em', normal: '1em', large: '1.18em', xlarge: '1.38em' };
+
+/** 受控逐字格式属性：size/color/underline，非法值直接忽略。 */
+export function parseInlineFormatAttrs(attrText) {
+  const out = {};
+  const re = /([a-zA-Z][\w-]*)=("[^"]*"|'[^']*'|\S+)/g;
+  const s = String(attrText || '').replace(/^\{|\}$/g, '');
+  let m;
+  while ((m = re.exec(s))) {
+    const k = m[1];
+    const v = m[2].replace(/^['"]|['"]$/g, '');
+    if (k === 'size' && Object.prototype.hasOwnProperty.call(INLINE_SIZE, v)) out.size = v;
+    else if (k === 'color' && /^#[0-9a-fA-F]{3,8}$/.test(v)) out.color = v;
+    else if (k === 'underline' && (v === '1' || v === 'true')) out.underline = true;
+  }
+  return out;
+}
+
+export function inlineFormatStyle(attrs) {
+  const a = attrs || {};
+  const parts = [];
+  if (INLINE_SIZE[a.size]) parts.push(`font-size:${INLINE_SIZE[a.size]}`);
+  if (a.color) parts.push(`color:${a.color}`);
+  if (a.underline) parts.push('text-decoration:underline');
+  return parts.join(';');
+}
+
 /** 行内解析（调用前文本已转义）：
  * 顺序锁定：① 行内码先取出占位（防 $ / == 被误处理）→ ② $$…$$ / $…$ 公式节点
  * → ③ ==高亮== → ④ 图片/链接 → ⑤ **b** *i* ~~s~~ → ⑥ 还原行内码。
@@ -52,6 +79,13 @@ function inline(text) {
   out = out.replace(/`([^`]+)`/g, (m, c) => {
     codes.push(`<code>${c}</code>`);
     return `\u0000C${codes.length - 1}\u0000`;
+  });
+
+  // 逐字格式：[文字]{size=large color=#c0392b underline=1}
+  // 先于链接解析，避免把受控 span 误判成普通链接。
+  out = out.replace(/\[([^\]\n]+)\]\{([^}\n]+)\}/g, (m, body, attrsText) => {
+    const style = inlineFormatStyle(parseInlineFormatAttrs(attrsText));
+    return style ? `<span class="md-inline-format" style="${style}">${body}</span>` : body;
   });
 
   // 块级公式（同行 $$…$$；独立行由 blocks() 处理）
@@ -67,7 +101,8 @@ function inline(text) {
   out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)(?:\{([^}]*)\})?/g, (m, alt, src, attrs) => {
     const u = safeUrl(src, true);
     if (!u) return `[${alt}](${src})`;
-    return renderMediaFigure(u, { src: u, alt, ...parseImageAttrs(attrs) });
+    const meta = parseImageAttrs(attrs);
+    return renderMediaFigure(u, { src: u, alt, ...meta, caption: meta.caption || '' });
   });
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, t, href) => {
     const u = safeUrl(href, false);
@@ -218,4 +253,4 @@ export function renderMarkdown(md) {
   return blocks(text.split('\n'));
 }
 
-export default { renderMarkdown };
+export default { renderMarkdown, parseInlineFormatAttrs, inlineFormatStyle };

@@ -363,7 +363,7 @@ async function doImport(fileOrFiles) {
     if (!isImportableSource(f.name)) { skipped++; continue; }
     try {
       const text = await f.text();
-      const note = buildImportedNote({ filename: f.name, text, project, type: 'note' });
+      const note = buildImportedNote({ filename: f.name, text, project, type: 'general' });
       if (note.contentFormat === 'html' && hasRelativeHtmlImages(text)) {
         warnings.push(`${f.name}: HTML 相对图片未自动导入，请在电脑端用 CLI 导入以复制图片`);
       }
@@ -447,11 +447,14 @@ async function refreshBackupStats() {
   const scope = readBackupScope();
   const all = await getAllNotes();
   const list = filterNotesByScope(all, scope);
-  const imgCount = new Set();
-  for (const n of list) for (const img of (n.images || [])) imgCount.add(String(img));
-  const withImg = list.filter((n) => (n.images && n.images.length) || n.imageData).length;
-  els.backupStats.textContent = `共 ${list.length} 条记录 ｜ ${imgCount.size} 张引用图片（${withImg} 条带图）`
-    + (els.backupImages.checked ? ' ｜ ☑ 含图片' : ' ｜ 不含图片');
+  const mediaCount = new Set();
+  for (const n of list) {
+    for (const img of (n.images || [])) mediaCount.add(String(img));
+    for (const m of (n.media || [])) if (m && m.src) mediaCount.add(String(m.src));
+  }
+  const withMedia = list.filter((n) => (n.images && n.images.length) || n.imageData || (n.media && n.media.length)).length;
+  els.backupStats.textContent = `共 ${list.length} 条记录 ｜ ${mediaCount.size} 个引用媒体（${withMedia} 条带媒体/附件）`
+    + (els.backupImages.checked ? ' ｜ ☑ 含媒体文件' : ' ｜ 不含媒体文件');
 }
 
 /** 导出迁移包：范围过滤 → exportNotePackage({notes, includeImages}) → 下载 */

@@ -7,8 +7,8 @@
  *   · 保留原 type.html 编辑器的全部字段和图片非破坏性版式能力。
  *
  * URL：
- *   editor.html?type=note                     新建（默认 other）
- *   editor.html?type=note&project=a/b         新建并预填文件夹
+ *   editor.html                                新建一般笔记（默认 other）
+ *   editor.html?type=note&project=a/b          新建并预填类型/文件夹
  *   editor.html?id=<note-id>&ret=<相对URL>     编辑已有记录
  */
 import {
@@ -19,7 +19,11 @@ import {
   saveEditorDraft,
   getEditorDraft,
   deleteEditorDraft,
+  putImageFile,
 } from './data.js';
+import {
+  hydrateTypeData, fieldValueForType, snapshotTypeFields, orphanFieldGroups, deleteOrphanField,
+} from './type-fields.js';
 import { normalizeProject } from './folder-util.js';
 import { BUTTONS, wrapSelection, renderPreview } from './md-toolbar.js';
 import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
@@ -27,6 +31,8 @@ import { renderHtmlPreviewInto } from './html-doc.js';
 import {
   mediaFromMarkdown, mergeMediaLists, normalizeMediaItem, normalizeMediaList,
   applyMediaAttrsToMarkdown, safeMediaSrc,
+  insertMarkdownImagesAtCursor, removeMarkdownImageBySrc, markdownHasImageSrc,
+  inferMediaKind, mediaExtension, mediaKindLabel, isAllowedMediaFile,
 } from './media-util.js';
 import { normalizeDocStyle, styleToCss, FONT_OPTIONS } from './doc-style.js';
 
@@ -34,6 +40,7 @@ const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const requestedId = params.get('id') || params.get('edit') || '';
 const draftKey = requestedId ? `note:${requestedId}` : 'new';
+const DEFAULT_TYPE = 'general';
 
 const els = {
   editor: $('editor'),
@@ -54,9 +61,14 @@ const els = {
   draftRestore: $('draft-restore-btn'),
   draftDiscard: $('draft-discard-btn'),
   photoCameraInput: $('photo-input-camera'),
+  photoVideoInput: $('photo-input-video'),
   photoGalleryInput: $('photo-input-gallery'),
+  mediaFileInput: $('media-input-file'),
   photoCameraBtn: $('photo-camera-btn'),
   photoGalleryBtn: $('photo-gallery-btn'),
+  audioRecordBtn: $('audio-record-btn'),
+  mediaFileBtn: $('media-file-btn'),
+  audioRecordStatus: $('audio-record-status'),
   photoStrip: $('photo-strip'),
   photoHint: $('photo-hint'),
   fType: $('f-type'),
@@ -76,6 +88,11 @@ const els = {
   mdToolbar: $('md-toolbar'),
   mdPreview: $('md-preview'),
   mdPreviewToggle: $('md-preview-toggle'),
+  insertImageBtn: $('insert-image-btn'),
+  mdColorInput: $('md-color-input'),
+  orphanFieldsField: $('orphan-fields-field'),
+  orphanFields: $('orphan-fields'),
+  fFirstLineIndent: $('f-first-line-indent'),
   fReader: $('f-reader'),
   fAi: $('f-ai'),
   askAiBtn: $('ask-ai-btn'),
@@ -93,8 +110,19 @@ let editingId = requestedId || null;
 let originalRecord = null;
 let editorFormat = 'markdown';
 let editorMedia = [];
-let photoSources = [];       // 当前编辑中的照片 dataURL；第一张存 imageData，其余存 images
-let assetImages = [];        // 从 CLI/正文导入的非 data: 图片路径（原样保留）
+let mediaSources = [];       // 当前编辑中的媒体源（Blob 仓相对路径或旧 dataURL）
+let typeData = {};           // 各类型字段快照：切换类型不丢
+let extensionFields = {};    // 当前类型 schema 之外的标量扩展字段
+let mediaSeq = 0;
+const mediaPreviewMap = new Map();   // 新插入媒体的即时预览 URL（不写入 JSON）
+let clearedLegacyFields = new Set();  // orphan 删除后需同步清掉的旧兼容字段
+let audioRecorder = null;
+let audioChunks = [];
+let audioRecordStream = null;
+let audioRecordTimer = null;
+let audioRecordStartedAt = 0;
+let longPressTimer = null;
+let cameraLongPressed = false;
 let docStyle = normalizeDocStyle({});
 let selectedConcepts = new Map();
 let conceptCatalog = [];
@@ -208,80 +236,316 @@ function compressImage(file, maxSide = 1600, quality = 0.86) {
   });
 }
 
-function syncPhotoMedia() {
-  const keep = new Set();
-  photoSources.forEach((src, i) => {
-    let m = editorMedia.find((x) => x.src === src || (i === 0 && x.id === 'imageData'));
-    if (!m) {
-      m = normalizeMediaItem({ id: i === 0 ? 'imageData' : `photo_${i + 1}`, src, alt: `照片 ${i + 1}` }, editorMedia.length);
-      editorMedia.push(m);
-    }
+function uniqueSrcs(list) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of list || []) {
+    const src = String(raw || '').trim();
+    if (!src || seen.has(src)) continue;
+    seen.add(src);
+    out.push(src);
+  }
+  return out;
+}
+
+function syncMediaSources() {
+  mediaSources = uniqueSrcs(mediaSources.filter((src) => safeMediaSrc(src)));
+  const oldBySrc = new Map(editorMedia.map((m) => [m.src, m]));
+  editorMedia = mediaSources.map((src, i) => {
+    const old = oldBySrc.get(src);
+    const m = old || normalizeMediaItem({ src, kind: inferMediaKind(src) }, i);
     m.src = src;
-    if (i === 0) m.id = 'imageData';
-    else if (m.id === 'imageData') m.id = `photo_${i + 1}`;
-    if (!m.alt) m.alt = `照片 ${i + 1}`;
-    keep.add(m);
-  });
-  // 清掉已经从照片条移除的 data: 图片媒体；保留正文/CLI 的 assets 图片媒体
-  editorMedia = editorMedia.filter((m) => {
-    const isDataPhoto = m.id === 'imageData' || String(m.src || '').startsWith('data:image/');
-    return !isDataPhoto || keep.has(m);
+    if (!m.alt) m.alt = m.name || `${mediaKindLabel(m.kind)} ${i + 1}`;
+    return m;
   });
 }
 
-function renderPhotoStrip() {
-  const visible = photoSources.map((src, i) => ({ src: safeMediaSrc(src), i })).filter((x) => x.src);
-  if (!visible.length) {
-    els.photoStrip.innerHTML = '<p class="muted photo-empty">还没有图片。</p>';
+function sourceLabel(i, kind = 'image') {
+  return `${mediaKindLabel(kind)} ${i + 1}`;
+}
+
+function displayMediaSrc(src) {
+  return mediaPreviewMap.get(src) || src;
+}
+
+function mediaIcon(kind) {
+  return ({ image: '🖼', audio: '🎙', video: '🎬', file: '📎' })[kind] || '📎';
+}
+
+function renderMediaStrip() {
+  if (!mediaSources.length) {
+    els.photoStrip.innerHTML = '<p class="muted photo-empty">还没有媒体附件。</p>';
   } else {
-    els.photoStrip.innerHTML = visible.map(({ src, i }) => `
-      <figure class="photo-thumb" data-photo-idx="${i}">
-        <img src="${esc(src)}" alt="照片 ${i + 1}">
+    els.photoStrip.innerHTML = mediaSources.map((src, i) => {
+      const m = editorMedia[i] || normalizeMediaItem({ src, kind: inferMediaKind(src) }, i);
+      const label = m.name || m.alt || sourceLabel(i, m.kind);
+      const inBody = markdownHasImageSrc(els.fContent?.value || '', src);
+      const srcView = safeMediaSrc(displayMediaSrc(src));
+      const preview = m.kind === 'image' && srcView
+        ? `<img src="${esc(srcView)}" alt="${esc(label)}">`
+        : `<div class="media-file-thumb" aria-hidden="true">${mediaIcon(m.kind)}</div>`;
+      return `
+      <figure class="photo-thumb media-thumb-card" data-media-idx="${i}">
+        ${preview}
         <figcaption>
-          <span>${i === 0 ? '主图' : `图 ${i + 1}`}</span>
-          <button type="button" class="btn ghost small danger" data-photo-remove="${i}" aria-label="移除照片 ${i + 1}">移除</button>
+          <span title="${esc(label)}">${mediaIcon(m.kind)} ${esc(label)}</span>
+          <span class="photo-thumb-actions">
+            <button type="button" class="btn ghost small" data-media-insert="${i}" ${inBody ? 'disabled' : ''}>${inBody ? '已在正文' : '插入正文'}</button>
+            <button type="button" class="btn ghost small danger" data-media-remove="${i}" aria-label="移除${esc(mediaKindLabel(m.kind))} ${i + 1}">移除</button>
+          </span>
         </figcaption>
-      </figure>`).join('');
+      </figure>`;
+    }).join('');
   }
   if (els.photoHint) {
-    els.photoHint.textContent = photoSources.length
-      ? `已添加 ${photoSources.length} 张图片；保存后可在正文下方查看。`
-      : '图片会压缩后保存在本机；正文中可用图片版式调整方向、宽度与对齐。';
+    els.photoHint.textContent = mediaSources.length
+      ? `已添加 ${mediaSources.length} 个媒体附件；新附件会自动插入光标处，旧附件可点「插入正文」。`
+      : '图片压缩保存；音频/视频/文档按原文件保存。可从相册、本机文件、相机或麦克风添加。';
   }
   renderMediaEditor();
 }
 
-async function addPhotoFiles(files) {
-  const list = Array.from(files || []).filter((f) => f && /^image\//i.test(f.type || ''));
-  if (!list.length) { toast('没有识别到图片文件'); return; }
-  let added = 0;
+function generateMediaPath(kind, mime, name) {
+  mediaSeq += 1;
+  const rand = Math.random().toString(36).slice(2, 10);
+  const ext = mediaExtension(kind, mime, name);
+  return `assets/pwa-${kind}-${Date.now()}-${mediaSeq}-${rand}.${ext}`;
+}
+
+const MAX_MEDIA_BYTES = 80 * 1024 * 1024;
+
+function objectUrlFor(blob) {
+  try { return URL.createObjectURL(blob); } catch { return ''; }
+}
+
+async function prepareMediaFile(file) {
+  if (!file) throw new Error('文件为空');
+  if (file.size > MAX_MEDIA_BYTES) throw new Error(`文件超过 ${Math.round(MAX_MEDIA_BYTES / 1024 / 1024)}MB 上限`);
+  if (!isAllowedMediaFile(file)) throw new Error('不支持该文件类型（拒绝 HTML/SVG/脚本等可执行内容）');
+  const kind = inferMediaKind(file.name, file.type);
+  const path = generateMediaPath(kind, file.type, file.name);
+  let mime = String(file.type || '');
+  let size = Number(file.size || 0);
+  if (kind === 'image') {
+    const dataUrl = await compressImage(file);
+    mime = 'image/jpeg';
+    await putImageFile(path, dataUrl);
+    mediaPreviewMap.set(path, dataUrl);
+    size = Math.round((dataUrl.length * 3) / 4);
+  } else {
+    await putImageFile(path, file);
+    if (kind === 'audio' || kind === 'video') {
+      const url = objectUrlFor(file);
+      if (url) mediaPreviewMap.set(path, url);
+    }
+  }
+  return normalizeMediaItem({
+    kind,
+    src: path,
+    name: file.name || sourceLabel(mediaSources.length, kind),
+    alt: file.name || '',
+    mime,
+    size,
+    caption: '',
+  }, mediaSources.length);
+}
+
+function insertMediaItemsIntoBody(items) {
+  const list = (items || []).filter((m) => m && m.src);
+  if (!list.length) return;
+  for (const m of list) {
+    if (!mediaSources.includes(m.src)) mediaSources.push(m.src);
+    if (!editorMedia.some((x) => x.src === m.src)) editorMedia.push(normalizeMediaItem(m, editorMedia.length));
+  }
+  syncMediaSources();
+  const inserted = list.map((m) => {
+    const found = editorMedia.find((x) => x.src === m.src) || m;
+    return { ...found, src: m.src, alt: found.alt || found.name || '', caption: found.caption || '' };
+  });
+  const r = insertMarkdownImagesAtCursor(
+    els.fContent.value,
+    els.fContent.selectionStart || 0,
+    els.fContent.selectionEnd || 0,
+    inserted,
+  );
+  els.fContent.value = r.value;
+  els.fContent.focus();
+  els.fContent.setSelectionRange(r.selStart, r.selEnd);
+  renderMediaStrip();
+  markDirty();
+}
+
+async function addMediaFiles(files) {
+  const list = Array.from(files || []).filter(Boolean);
+  if (!list.length) { toast('没有识别到文件'); return; }
+  if (editorFormat !== 'markdown') {
+    toast('请先将正文格式切换为 Markdown，再插入媒体', 4200);
+    return;
+  }
+  const added = [];
   const failures = [];
   for (const file of list) {
     try {
-      const dataUrl = await compressImage(file);
-      if (!photoSources.includes(dataUrl)) { photoSources.push(dataUrl); added++; }
+      added.push(await prepareMediaFile(file));
     } catch (e) {
-      failures.push(`${file.name || '图片'}：${e.message}`);
+      failures.push(`${file.name || '文件'}：${e.message}`);
     }
   }
-  if (added) {
-    syncPhotoMedia();
-    renderPhotoStrip();
-    markDirty();
-    toast(`已添加 ${added} 张图片`);
+  if (added.length) {
+    insertMediaItemsIntoBody(added);
+    const kinds = added.reduce((acc, m) => { acc[m.kind] = (acc[m.kind] || 0) + 1; return acc; }, {});
+    toast(`已插入 ${Object.entries(kinds).map(([k, n]) => `${n} 个${mediaKindLabel(k)}`).join('、')}到光标处`);
   }
-  if (failures.length) toast(`部分图片失败：${failures[0]}`, 4200);
+  if (failures.length) toast(`部分文件失败：${failures[0]}`, 5200);
 }
 
-function removePhoto(index) {
+function insertMediaAtCursor(index) {
   const i = Number(index);
-  if (!Number.isInteger(i) || i < 0 || i >= photoSources.length) return;
-  const src = photoSources[i];
-  photoSources.splice(i, 1);
-  editorMedia = editorMedia.filter((m) => m.src !== src && !(i === 0 && m.id === 'imageData'));
-  syncPhotoMedia();
-  renderPhotoStrip();
+  const src = mediaSources[i];
+  if (!src) return;
+  if (editorFormat !== 'markdown') { toast('请先将正文格式切换为 Markdown', 4200); return; }
+  if (markdownHasImageSrc(els.fContent.value, src)) { toast('这个媒体已在正文中'); return; }
+  const m = editorMedia[i] || normalizeMediaItem({ src, kind: inferMediaKind(src) }, i);
+  const r = insertMarkdownImagesAtCursor(
+    els.fContent.value,
+    els.fContent.selectionStart || 0,
+    els.fContent.selectionEnd || 0,
+    [{ ...m, src, alt: m.alt || m.name || sourceLabel(i, m.kind), caption: m.caption || '' }],
+  );
+  els.fContent.value = r.value;
+  els.fContent.focus();
+  els.fContent.setSelectionRange(r.selStart, r.selEnd);
+  renderMediaStrip();
   markDirty();
+  toast('已插入正文');
+}
+
+function syncMediaAttrsToContent() {
+  if (!els.fContent || editorFormat !== 'markdown') return;
+  const next = applyMediaAttrsToMarkdown(els.fContent.value, editorMedia);
+  if (next !== els.fContent.value) els.fContent.value = next;
+}
+
+function removeMedia(index) {
+  const i = Number(index);
+  if (!Number.isInteger(i) || i < 0 || i >= mediaSources.length) return;
+  const src = mediaSources[i];
+  mediaSources.splice(i, 1);
+  editorMedia = editorMedia.filter((m) => m.src !== src);
+  mediaPreviewMap.delete(src);
+  if (editorFormat === 'markdown') {
+    els.fContent.value = removeMarkdownImageBySrc(els.fContent.value, src);
+  }
+  syncMediaSources();
+  renderMediaStrip();
+  markDirty();
+}
+
+/* ── 麦克风录音 ── */
+function chooseAudioMime() {
+  const C = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+  if (typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function') {
+    return C.find((m) => MediaRecorder.isTypeSupported(m)) || '';
+  }
+  return '';
+}
+
+function updateAudioRecordStatus() {
+  if (!els.audioRecordStatus) return;
+  if (!audioRecorder) { els.audioRecordStatus.hidden = true; return; }
+  const sec = Math.max(0, Math.floor((Date.now() - audioRecordStartedAt) / 1000));
+  els.audioRecordStatus.hidden = false;
+  els.audioRecordStatus.textContent = `● 正在录音 ${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}，再点「录音」停止`;
+}
+
+function cleanupAudioRecording() {
+  if (audioRecordTimer) clearInterval(audioRecordTimer);
+  audioRecordTimer = null;
+  if (audioRecordStream) {
+    audioRecordStream.getTracks().forEach((tr) => { try { tr.stop(); } catch { /* ignore */ } });
+  }
+  audioRecordStream = null;
+  audioRecorder = null;
+  if (els.audioRecordBtn) {
+    els.audioRecordBtn.classList.remove('recording');
+    els.audioRecordBtn.textContent = '🎙 录音';
+  }
+  if (els.audioRecordStatus) els.audioRecordStatus.hidden = true;
+}
+
+async function addRecordedAudio(blob, mime) {
+  const path = generateMediaPath('audio', mime, 'recording.webm');
+  await putImageFile(path, blob);
+  const url = objectUrlFor(blob);
+  if (url) mediaPreviewMap.set(path, url);
+  const n = mediaSources.filter((src) => (editorMedia.find((m) => m.src === src)?.kind) === 'audio').length + 1;
+  const item = normalizeMediaItem({
+    kind: 'audio', src: path, name: `录音 ${n}`, alt: `录音 ${n}`, mime, size: blob.size, caption: '',
+  }, mediaSources.length);
+  insertMediaItemsIntoBody([item]);
+  toast('录音已插入正文');
+}
+
+async function toggleAudioRecording() {
+  if (editorFormat !== 'markdown') { toast('请先将正文格式切换为 Markdown，再插入录音', 4200); return; }
+  if (audioRecorder) {
+    try { audioRecorder.stop(); } catch { cleanupAudioRecording(); }
+    return;
+  }
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function' || typeof MediaRecorder === 'undefined') {
+    toast('当前浏览器不支持录音，或页面不是 HTTPS/localhost 安全环境', 5200);
+    return;
+  }
+  try {
+    audioRecordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    const mime = chooseAudioMime();
+    const rec = new MediaRecorder(audioRecordStream, mime ? { mimeType: mime } : undefined);
+    audioRecorder = rec;
+    audioRecordStartedAt = Date.now();
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) audioChunks.push(e.data); };
+    rec.onstop = async () => {
+      const type = rec.mimeType || mime || 'audio/webm';
+      const blob = new Blob(audioChunks, { type });
+      const chunks = audioChunks.slice();
+      audioChunks = [];
+      cleanupAudioRecording();
+      if (chunks.length) {
+        try { await addRecordedAudio(blob, type); } catch (e) { toast(`录音保存失败：${e.message}`, 5200); }
+      }
+    };
+    rec.start();
+    els.audioRecordBtn.classList.add('recording');
+    els.audioRecordBtn.textContent = '⏹ 停止录音';
+    updateAudioRecordStatus();
+    audioRecordTimer = setInterval(updateAudioRecordStatus, 1000);
+  } catch (e) {
+    cleanupAudioRecording();
+    toast(`无法启动录音：${e.message || '麦克风权限被拒绝'}`, 5200);
+  }
+}
+
+function bindLongPress(button, onTap, onLong) {
+  if (!button) return;
+  let timer = null;
+  let firedLong = false;
+  const clear = () => { if (timer) clearTimeout(timer); timer = null; };
+  button.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    firedLong = false;
+    clear();
+    timer = setTimeout(() => {
+      firedLong = true;
+      try { if (navigator.vibrate) navigator.vibrate(30); } catch { /* ignore */ }
+      onLong();
+    }, 650);
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => button.addEventListener(ev, clear));
+  button.addEventListener('contextmenu', (e) => e.preventDefault());
+  button.addEventListener('click', (e) => {
+    if (firedLong) { e.preventDefault(); firedLong = false; return; }
+    onTap();
+  });
 }
 
 /* ── 类型字段 ── */
@@ -293,24 +557,40 @@ function fillTypeOptions(selectedKey) {
 }
 
 function selectedTypeDef() {
-  const key = (els.fType && els.fType.value) || currentType?.key || 'note';
-  return NoteTypes.getType(key) || NoteTypes.getType('note') || currentType;
+  const key = (els.fType && els.fType.value) || currentType?.key || DEFAULT_TYPE;
+  return NoteTypes.getType(key) || NoteTypes.getType(DEFAULT_TYPE) || currentType;
+}
+
+function readCurrentTypeValues(typeDef = selectedTypeDef()) {
+  const out = {};
+  for (const f of typeDef?.fields || []) {
+    const el = $(`f-${f}`);
+    if (!el) continue;
+    if (el.type === 'checkbox') out[f] = !!el.checked;
+    else out[f] = el.value;
+  }
+  return out;
+}
+
+function captureActiveTypeFields(typeDef = currentType || selectedTypeDef()) {
+  if (!typeDef || !typeDef.key) return;
+  typeData = snapshotTypeFields(typeData, typeDef, readCurrentTypeValues(typeDef));
 }
 
 function buildTypeFields(rec, typeDef = selectedTypeDef()) {
   if (!els.typeFields || !typeDef) return;
   const existing = rec || {};
-  const meta = existing.meta || {};
   els.typeFields.innerHTML = '';
   for (const f of typeDef.fields || []) {
     const metaInfo = NoteTypes.fieldMeta(f);
+    const value = fieldValueForType(typeData, typeDef.key, f, existing);
     const field = document.createElement('label');
     field.className = 'field';
     if (metaInfo.type === 'checkbox') {
       field.innerHTML = `<span class="field-head"><span>${esc(metaInfo.label)}</span></span>`;
       const chk = document.createElement('input');
       chk.type = 'checkbox';
-      chk.checked = !!meta.done;
+      chk.checked = !!value;
       chk.id = `f-${f}`;
       chk.className = 'field-check';
       field.appendChild(chk);
@@ -320,9 +600,7 @@ function buildTypeFields(rec, typeDef = selectedTypeDef()) {
       input.type = metaInfo.type || 'text';
       input.placeholder = metaInfo.placeholder || '';
       input.id = `f-${f}`;
-      if (f === 'book') input.value = existing.book || '';
-      if (f === 'pages') input.value = existing.pages || '';
-      if (f === 'due') input.value = meta.due || '';
+      input.value = value == null ? '' : String(value);
       field.appendChild(input);
     }
     els.typeFields.appendChild(field);
@@ -331,15 +609,43 @@ function buildTypeFields(rec, typeDef = selectedTypeDef()) {
 
 function collectTypeFields(rec, typeDef = selectedTypeDef()) {
   const out = { meta: { ...((rec && rec.meta) || {}) } };
+  const values = readCurrentTypeValues(typeDef);
   for (const f of typeDef.fields || []) {
-    const el = $(`f-${f}`);
-    if (!el) continue;
-    if (f === 'book') out.book = el.value.trim();
-    else if (f === 'pages') out.pages = el.value.trim();
-    else if (f === 'done') out.meta.done = el.checked;
-    else if (f === 'due') out.meta.due = el.value;
+    const v = Object.prototype.hasOwnProperty.call(values, f) ? values[f] : fieldValueForType(typeData, typeDef.key, f, rec);
+    if (f === 'book') out.book = String(v || '').trim();
+    else if (f === 'pages') out.pages = String(v || '').trim();
+    else if (f === 'done') out.meta.done = !!v;
+    else if (f === 'due') out.meta.due = String(v || '');
+    else out.meta[f] = v;
   }
   return out;
+}
+
+function typeLabelOf(key) {
+  const t = NoteTypes.getType(String(key || ''));
+  return t ? `${t.icon || '📝'} ${t.label}` : String(key || '未知类型');
+}
+
+function renderOrphanFields() {
+  if (!els.orphanFields || !els.orphanFieldsField) return;
+  const groups = orphanFieldGroups(typeData, extensionFields, selectedTypeDef(), typeLabelOf);
+  if (!groups.length) {
+    els.orphanFieldsField.hidden = true;
+    els.orphanFields.innerHTML = '';
+    return;
+  }
+  els.orphanFieldsField.hidden = false;
+  els.orphanFields.innerHTML = groups.map((g) => {
+    const rows = g.items.map((it) => {
+      const val = it.value == null ? '' : String(it.value);
+      return `<div class="orphan-field-row">
+        <code>${esc(it.key)}</code><span>${esc(val || '（空）')}</span>
+        <button type="button" class="btn ghost small danger" data-orphan-delete="1"
+          data-orphan-kind="${esc(g.kind)}" data-orphan-type="${esc(g.typeKey || '')}" data-orphan-key="${esc(it.key)}">删除</button>
+      </div>`;
+    }).join('');
+    return `<div class="orphan-field-group"><div class="orphan-field-group-name">${esc(g.label)}</div>${rows}</div>`;
+  }).join('');
 }
 
 /* ── 概念目录 ── */
@@ -361,7 +667,7 @@ async function loadConceptCatalog() {
 }
 
 function renderConceptSelector() {
-  const typeKey = selectedTypeDef()?.key || 'note';
+  const typeKey = selectedTypeDef()?.key || DEFAULT_TYPE;
   const show = typeKey === 'note' || typeKey === 'diary';
   if (els.conceptField) els.conceptField.hidden = !show;
   if (!show || !els.conceptSelect) return;
@@ -399,8 +705,8 @@ function renderConceptSelector() {
 /* ── 图片版式 ── */
 function mediaPreviewSrc(m) {
   if (!m) return '';
-  const raw = m.id === 'imageData' && (!m.src || m.src === 'imageData') ? (photoSources[0] || '') : (m.src || '');
-  return safeMediaSrc(raw);
+  const raw = m.id === 'imageData' && (!m.src || m.src === 'imageData') ? (mediaSources[0] || '') : (m.src || '');
+  return safeMediaSrc(displayMediaSrc(raw));
 }
 
 function renderMediaEditor() {
@@ -410,22 +716,32 @@ function renderMediaEditor() {
   els.mediaEditor.innerHTML = visible.map((m, i) => {
     const idx = editorMedia.indexOf(m);
     const src = mediaPreviewSrc(m);
-    return `<div class="media-row" data-media-idx="${idx}">
-      <img class="media-thumb" src="${esc(src)}" alt="${esc(m.alt || '笔记图片')}">
-      <div class="media-meta">
-        <div class="media-name">${esc(m.alt || `图片 ${i + 1}`)}</div>
-        <div class="media-controls">
-          <button type="button" class="btn ghost small" data-media-act="rotate-left" title="向左旋转 90°">⟲</button>
-          <button type="button" class="btn ghost small" data-media-act="rotate-right" title="向右旋转 90°">⟳</button>
-          <label>宽度 <select data-media-field="width">
+    const label = m.name || m.alt || sourceLabel(i, m.kind);
+    let preview = `<div class="media-file-thumb" aria-hidden="true">${mediaIcon(m.kind)}</div>`;
+    if (m.kind === 'image') preview = `<img class="media-thumb" src="${esc(src)}" alt="${esc(label)}">`;
+    else if (m.kind === 'audio') preview = `<audio class="media-thumb-audio" controls preload="metadata" src="${esc(src)}"></audio>`;
+    else if (m.kind === 'video') preview = `<video class="media-thumb-video" controls playsinline preload="metadata" src="${esc(src)}"></video>`;
+    const rotateControls = m.kind === 'image'
+      ? `<button type="button" class="btn ghost small" data-media-act="rotate-left" title="向左旋转 90°">⟲</button>
+         <button type="button" class="btn ghost small" data-media-act="rotate-right" title="向右旋转 90°">⟳</button>`
+      : '';
+    const layoutControls = (m.kind === 'image' || m.kind === 'video')
+      ? `<label>宽度 <select data-media-field="width">
             ${[25, 50, 75, 100].map((w) => `<option value="${w}"${m.widthPercent === w ? ' selected' : ''}>${w}%</option>`).join('')}
           </select></label>
           <label>对齐 <select data-media-field="align">
             ${[['left', '左'], ['center', '中'], ['right', '右']].map(([v, l]) => `<option value="${v}"${m.align === v ? ' selected' : ''}>${l}</option>`).join('')}
-          </select></label>
-          <button type="button" class="btn ghost small" data-media-act="reset">重置</button>
+          </select></label>`
+      : '';
+    return `<div class="media-row media-row-${esc(m.kind)}" data-media-idx="${idx}">
+      ${preview}
+      <div class="media-meta">
+        <div class="media-name">${mediaIcon(m.kind)} ${esc(label)} <span class="muted">(${esc(mediaKindLabel(m.kind))}${m.size ? ` · ${Math.max(1, Math.round(m.size / 1024))} KB` : ''})</span></div>
+        <div class="media-controls">
+          ${rotateControls}${layoutControls}
+          <button type="button" class="btn ghost small" data-media-act="reset">重置版式</button>
         </div>
-        <input class="media-caption" data-media-field="caption" value="${esc(m.caption || '')}" placeholder="图片说明（可选）">
+        <input class="media-caption" data-media-field="caption" value="${esc(m.caption || '')}" placeholder="说明/图注（显示在附件下方，可选）">
       </div>
     </div>`;
   }).join('');
@@ -448,6 +764,7 @@ function onMediaEditorEvent(e) {
     else if (field === 'align') m.align = e.target.value || 'center';
     else if (field === 'caption') m.caption = e.target.value || '';
   }
+  syncMediaAttrsToContent();
   renderMediaEditor();
   markDirty();
 }
@@ -457,12 +774,14 @@ function initDocStyleOptions() {
   if (!els.fFont) return;
   els.fFont.innerHTML = FONT_OPTIONS.map((f) => `<option value="${f.value}">${f.label}</option>`).join('');
   els.fFont.value = docStyle.font;
+  if (els.fFirstLineIndent) els.fFirstLineIndent.value = docStyle.firstLineIndent;
 }
 
 function applyDocStyleToControls() {
   if (els.fFont) els.fFont.value = docStyle.font;
   if (els.fAlign) els.fAlign.value = docStyle.align;
   if (els.fLineHeight) els.fLineHeight.value = docStyle.lineHeight;
+  if (els.fFirstLineIndent) els.fFirstLineIndent.value = docStyle.firstLineIndent;
 }
 
 function readDocStyle() {
@@ -470,6 +789,7 @@ function readDocStyle() {
     font: els.fFont?.value,
     align: els.fAlign?.value,
     lineHeight: els.fLineHeight?.value,
+    firstLineIndent: els.fFirstLineIndent?.value,
   });
   return docStyle;
 }
@@ -561,10 +881,11 @@ function applyFolderPicker() {
 /* ── 草稿 ── */
 function collectDraft() {
   const typeDef = selectedTypeDef();
+  captureActiveTypeFields(typeDef);
   const fields = collectTypeFields(originalRecord, typeDef);
   return {
     editingId,
-    type: typeDef?.key || 'note',
+    type: typeDef?.key || DEFAULT_TYPE,
     title: els.fTitle?.value || '',
     date: els.fDate?.value || '',
     tags: els.fTags?.value || '',
@@ -573,14 +894,15 @@ function collectDraft() {
     project: els.fProject?.value || 'other',
     readerNote: els.fReader?.value || '',
     aiNote: els.fAi?.value || '',
-    photos: photoSources.slice(),
-    assetImages: assetImages.slice(),
+    photos: mediaSources.slice(),
     media: editorMedia.map((m) => ({ ...m })),
     style: { ...docStyle },
     concepts: [...selectedConcepts.entries()].map(([id, source]) => ({ id, source: source || 'user' })),
     book: fields.book || '',
     pages: fields.pages || '',
     meta: fields.meta || {},
+    typeData: JSON.parse(JSON.stringify(typeData || {})),
+    extensions: { ...(extensionFields || {}) },
   };
 }
 
@@ -610,16 +932,23 @@ function applyDraft(draft) {
   syncFormatUi();
   els.fReader.value = draft.readerNote || '';
   els.fAi.value = draft.aiNote || '';
-  photoSources = Array.isArray(draft.photos) ? draft.photos.filter((x) => typeof x === 'string') : [];
-  assetImages = Array.isArray(draft.assetImages) ? draft.assetImages.filter((x) => typeof x === 'string') : [];
+  mediaSources = Array.isArray(draft.photos) ? draft.photos.filter((x) => typeof x === 'string') : [];
   editorMedia = normalizeMediaList(draft.media || []);
-  syncPhotoMedia();
+  syncMediaSources();
   docStyle = normalizeDocStyle(draft.style || {});
   applyDocStyleToControls();
   selectedConcepts = new Map((draft.concepts || []).map((c) => [String(c.id || ''), String(c.source || 'user')]).filter(([id]) => id));
+  typeData = hydrateTypeData({
+    type: draft.type || currentType?.key || DEFAULT_TYPE,
+    typeData: draft.typeData || {},
+    extensions: draft.extensions || {},
+    book: draft.book || '', pages: draft.pages || '', meta: draft.meta || {},
+  }).typeData;
+  extensionFields = hydrateTypeData({ extensions: draft.extensions || {} }).extensions;
   buildTypeFields({ book: draft.book || '', pages: draft.pages || '', meta: draft.meta || {} }, selectedTypeDef());
+  renderOrphanFields();
   setProject(draft.project || 'other');
-  renderPhotoStrip();
+  renderMediaStrip();
   renderConceptSelector();
   dirty = true;
   scheduleDraft();
@@ -678,7 +1007,7 @@ async function askAI() {
         role: 'user',
         content: [
           { type: 'text', text: `读者的疑问/要求：${question}` },
-          ...photoSources.map((src) => ({ type: 'image_url', image_url: { url: src } })),
+          ...editorMedia.filter((m) => m.kind === 'image').map((m) => ({ type: 'image_url', image_url: { url: m.src } })),
         ],
       },
     ],
@@ -723,24 +1052,27 @@ async function initEditor() {
     }
   }
   originalRecord = rec;
-  currentType = NoteTypes.getType(rec?.type || params.get('type') || 'note') || NoteTypes.getType('note');
+  currentType = NoteTypes.getType(rec?.type || params.get('type') || DEFAULT_TYPE) || NoteTypes.getType(DEFAULT_TYPE);
   fillTypeOptions(currentType.key);
+  const hydrated = hydrateTypeData(rec || { type: currentType.key });
+  typeData = hydrated.typeData;
+  extensionFields = hydrated.extensions;
 
-  photoSources = [];
-  assetImages = [];
-  if (rec?.imageData && safeMediaSrc(rec.imageData)) photoSources.push(rec.imageData);
-  for (const src of (rec?.images || [])) {
-    if (String(src).startsWith('data:image/')) {
-      if (safeMediaSrc(src) && !photoSources.includes(src)) photoSources.push(src);
-    } else if (src) assetImages.push(src);
+  const contentMedia = mediaFromMarkdown(rec?.content || '');
+  const srcs = [];
+  if (rec?.imageData) srcs.push(rec.imageData);
+  for (const src of (rec?.images || [])) srcs.push(src);
+  for (const m of (rec?.media || [])) {
+    if (m && m.src && m.src !== 'imageData') srcs.push(m.src);
   }
+  for (const m of contentMedia) srcs.push(m.src);
+  mediaSources = uniqueSrcs(srcs.filter((src) => safeMediaSrc(src)));
   editorMedia = mergeMediaLists(
     rec?.media,
-    photoSources.map((src, i) => normalizeMediaItem({ id: i === 0 ? 'imageData' : `photo_${i + 1}`, src, alt: `照片 ${i + 1}` }, i)),
-    assetImages.map((src, i) => normalizeMediaItem({ src, alt: `图片 ${i + 1}` }, photoSources.length + i)),
-    mediaFromMarkdown(rec?.content || ''),
+    mediaSources.map((src, i) => normalizeMediaItem({ id: src.startsWith('data:image/') ? 'imageData' : `media_${i + 1}`, src, kind: inferMediaKind(src), alt: `${mediaKindLabel(inferMediaKind(src))} ${i + 1}` }, i)),
+    contentMedia,
   );
-  syncPhotoMedia();
+  syncMediaSources();
 
   editorFormat = rec?.contentFormat || 'markdown';
   if (els.fFormat) els.fFormat.value = editorFormat;
@@ -755,11 +1087,12 @@ async function initEditor() {
   els.fAi.value = rec?.aiNote || '';
   selectedConcepts = new Map((rec?.concepts || []).map((c) => [String(c.id || ''), String(c.source || 'user')]).filter(([id]) => id));
   buildTypeFields(rec, currentType);
+  renderOrphanFields();
   setProject(rec?.project || params.get('project') || 'other');
   els.editorTitle.textContent = rec ? '编辑笔记' : '新建笔记';
   document.title = `${rec ? '编辑' : '新建'}笔记 · 读书笔记`;
   els.saveStatus.textContent = rec ? '已载入' : '';
-  renderPhotoStrip();
+  renderMediaStrip();
   renderConceptSelector();
   loaded = true;
   dirty = false;
@@ -777,15 +1110,18 @@ async function saveRecord() {
   setSaving(true);
   try {
     const typeDef = selectedTypeDef();
+    captureActiveTypeFields(typeDef);
     const title = els.fTitle.value.trim();
     const date = els.fDate.value || todayStr();
     const fields = collectTypeFields(originalRecord, typeDef);
     const existing = originalRecord || (editingId ? await getNoteById(editingId) : null);
-    const images = [...photoSources.slice(1), ...assetImages].filter((v, i, arr) => v && arr.indexOf(v) === i);
+    const imageMedia = editorMedia.filter((m) => m.kind === 'image');
+    const dataPhoto = imageMedia.find((m) => String(m.src).startsWith('data:image/'))?.src || '';
+    const images = imageMedia.map((m) => m.src).filter((v) => v && v !== dataPhoto);
     const rec = {
       ...existing,
       id: editingId || undefined,
-      type: typeDef?.key || 'note',
+      type: typeDef?.key || DEFAULT_TYPE,
       title: title || `${typeDef?.label || '笔记'} · ${date}`,
       date,
       tags: parseTagsInput(els.fTags.value),
@@ -799,11 +1135,18 @@ async function saveRecord() {
       project: normalizeProject(els.fProject.value || 'other'),
       readerNote: els.fReader.value.trim(),
       aiNote: els.fAi.value.trim(),
-      imageData: photoSources[0] || '',
+      imageData: dataPhoto,
       images,
+      typeData: JSON.parse(JSON.stringify(typeData || {})),
+      extensions: { ...(extensionFields || {}) },
       updatedAt: Date.now(),
       ...fields,
     };
+    // orphan 字段删除：若当前类型未重新提供对应值，同步清掉旧兼容路径，避免下次加载又被回填。
+    if (clearedLegacyFields.has('book') && !Object.prototype.hasOwnProperty.call(fields, 'book')) rec.book = '';
+    if (clearedLegacyFields.has('pages') && !Object.prototype.hasOwnProperty.call(fields, 'pages')) rec.pages = '';
+    if (clearedLegacyFields.has('done') && !(typeDef.fields || []).includes('done')) delete rec.meta.done;
+    if (clearedLegacyFields.has('due') && !(typeDef.fields || []).includes('due')) delete rec.meta.due;
     const savedId = await addNote(rec);
     editingId = savedId || editingId;
     originalRecord = await getNoteById(editingId);
@@ -860,24 +1203,41 @@ els.draftDiscard.addEventListener('click', async () => {
   toast('已丢弃草稿');
 });
 
-els.photoCameraBtn.addEventListener('click', () => els.photoCameraInput.click());
+bindLongPress(els.photoCameraBtn,
+  () => els.photoCameraInput.click(),
+  () => els.photoVideoInput.click());
 els.photoGalleryBtn.addEventListener('click', () => els.photoGalleryInput.click());
+if (els.mediaFileBtn) els.mediaFileBtn.addEventListener('click', () => els.mediaFileInput.click());
+if (els.audioRecordBtn) els.audioRecordBtn.addEventListener('click', toggleAudioRecording);
 els.photoCameraInput.addEventListener('change', async () => {
-  await addPhotoFiles(els.photoCameraInput.files);
+  await addMediaFiles(els.photoCameraInput.files);
   els.photoCameraInput.value = '';
 });
+els.photoVideoInput.addEventListener('change', async () => {
+  await addMediaFiles(els.photoVideoInput.files);
+  els.photoVideoInput.value = '';
+});
 els.photoGalleryInput.addEventListener('change', async () => {
-  await addPhotoFiles(els.photoGalleryInput.files);
+  await addMediaFiles(els.photoGalleryInput.files);
   els.photoGalleryInput.value = '';
 });
+els.mediaFileInput.addEventListener('change', async () => {
+  await addMediaFiles(els.mediaFileInput.files);
+  els.mediaFileInput.value = '';
+});
 els.photoStrip.addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-photo-remove]');
-  if (btn) removePhoto(btn.getAttribute('data-photo-remove'));
+  const removeBtn = e.target.closest('[data-media-remove]');
+  if (removeBtn) { removeMedia(removeBtn.getAttribute('data-media-remove')); return; }
+  const insertBtn = e.target.closest('[data-media-insert]');
+  if (insertBtn) insertMediaAtCursor(insertBtn.getAttribute('data-media-insert'));
 });
 
 els.fType.addEventListener('change', () => {
+  captureActiveTypeFields();
   const def = selectedTypeDef();
+  currentType = def;
   buildTypeFields(originalRecord, def);
+  renderOrphanFields();
   renderConceptSelector();
   els.editorTitle.textContent = editingId ? '编辑笔记' : '新建笔记';
   markDirty();
@@ -886,8 +1246,55 @@ els.mdToolbar.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-md]');
   if (btn) onMdBtn(btn.getAttribute('data-md'));
 });
+if (els.insertImageBtn) els.insertImageBtn.addEventListener('click', () => {
+  if (editorFormat !== 'markdown') { toast('请先将正文格式切换为 Markdown', 4200); return; }
+  els.mediaFileInput.click();
+});
+if (els.mdColorInput) {
+  els.mdColorInput.addEventListener('change', () => {
+    if (editorFormat !== 'markdown') { toast('逐字颜色仅适用于 Markdown 正文', 4200); return; }
+    const cfg = { span: { color: els.mdColorInput.value }, placeholder: '彩色文字' };
+    const r = wrapSelection(els.fContent.value, els.fContent.selectionStart || 0, els.fContent.selectionEnd || 0, cfg);
+    els.fContent.value = r.value;
+    els.fContent.focus();
+    els.fContent.setSelectionRange(r.selStart, r.selEnd);
+    markDirty();
+  });
+}
+if (els.orphanFields) {
+  els.orphanFields.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-orphan-delete]');
+    if (!btn) return;
+    const kind = btn.getAttribute('data-orphan-kind');
+    const typeKey = btn.getAttribute('data-orphan-type');
+    const key = btn.getAttribute('data-orphan-key');
+    if (!confirm(`删除字段「${key}」及其值？保存后生效。`)) return;
+    const r = deleteOrphanField(typeData, extensionFields, kind, typeKey, key);
+    if (!r.deleted) { toast('该字段不能从这里删除'); return; }
+    typeData = r.typeData;
+    extensionFields = r.extensions;
+    if (kind === 'type' && typeKey === 'note' && (key === 'book' || key === 'pages')) {
+      clearedLegacyFields.add(key);
+      if (originalRecord && currentType?.key !== 'note') originalRecord[key] = '';
+    }
+    if (kind === 'type' && typeKey === 'memo' && (key === 'done' || key === 'due')) {
+      clearedLegacyFields.add(key);
+      if (originalRecord && currentType?.key !== 'memo') {
+        originalRecord.meta = { ...(originalRecord.meta || {}) };
+        delete originalRecord.meta[key];
+      }
+    }
+    if (kind === 'extension' && originalRecord?.meta) {
+      originalRecord.meta = { ...originalRecord.meta };
+      delete originalRecord.meta[key];
+    }
+    renderOrphanFields();
+    markDirty();
+    toast('已移除字段，保存后写入');
+  });
+}
 if (els.fFormat) els.fFormat.addEventListener('change', () => { syncFormatUi(); markDirty(); });
-[els.fFont, els.fAlign, els.fLineHeight].forEach((el) => {
+[els.fFont, els.fAlign, els.fLineHeight, els.fFirstLineIndent].forEach((el) => {
   if (el) el.addEventListener('change', () => {
     readDocStyle();
     markDirty();
@@ -901,7 +1308,12 @@ if (els.mediaEditor) els.mediaEditor.addEventListener('input', (e) => {
   const row = e.target.closest('[data-media-idx]');
   if (!row) return;
   const m = editorMedia[Number(row.getAttribute('data-media-idx'))];
-  if (m) { m.caption = e.target.value || ''; markDirty(); }   // 输入期间不重绘，避免光标/焦点丢失
+  if (m) {
+    m.caption = e.target.value || '';
+    m.alt = m.caption || m.alt || '图片';
+    syncMediaAttrsToContent();
+    markDirty();
+  }   // 输入期间不重绘，避免光标/焦点丢失
 });
 els.mdPreviewToggle.addEventListener('click', toggleMdPreview);
 els.askAiBtn.addEventListener('click', async () => {
@@ -922,9 +1334,16 @@ els.aiSettingsSave.addEventListener('click', saveAiSettings);
 els.editor.addEventListener('input', markDirty);
 els.editor.addEventListener('change', markDirty);
 window.addEventListener('beforeunload', (e) => {
+  cleanupAudioRecording();
   if (!dirty || saving) return;
   e.preventDefault();
   e.returnValue = '';
+});
+// 页面进入后台/隐藏时停止麦克风，避免持续占用
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && audioRecorder) {
+    try { audioRecorder.stop(); } catch { cleanupAudioRecording(); }
+  }
 });
 
 /* 启动 */

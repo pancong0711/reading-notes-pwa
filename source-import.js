@@ -117,7 +117,7 @@ function cleanTags(v) {
 }
 
 /** 源文本 → 统一 Note 导入记录（不含 IndexedDB id；由 addNote 补）。 */
-export function buildImportedNote({ filename, text, project = 'other', type = 'note', now = Date.now() } = {}) {
+export function buildImportedNote({ filename, text, project = 'other', type = 'general', now = Date.now() } = {}) {
   const fmt = detectSourceFormat(filename);
   if (!fmt) throw new Error(`暂不支持的文档类型：${filename || '(无文件名)'}`);
   const raw = String(text == null ? '' : text);
@@ -137,7 +137,7 @@ export function buildImportedNote({ filename, text, project = 'other', type = 'n
   const date = String(meta.date || '').trim() || dateFromFilename(filename) || new Date(now).toISOString().slice(0, 10);
   const importedAt = new Date(now).toISOString();
   return {
-    type: String(meta.type || type || 'note'),
+    type: String(meta.type || type || 'general'),
     title,
     book: String(meta.book || '未归档'),
     author: String(meta.author || ''),

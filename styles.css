@@ -923,6 +923,18 @@ main {
   color: var(--ink-soft, #6b6256);
   margin-top: 4px;
 }
+.note-media-audio, .note-media-video { display: block; margin: 10px auto; max-width: 100%; }
+.note-media .note-media-audio { width: 100%; }
+.note-media .note-media-video { width: 100%; height: auto; background: #000; border-radius: 8px; }
+.media-attachment-label { font-size: .9em; color: var(--muted, #786f62); margin-bottom: 4px; }
+.note-attachment { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--line, #e6dfd2); border-radius: 8px; background: #fbf8f1; color: var(--ink, #2f2a22); text-decoration: none; overflow-wrap: anywhere; }
+.media-file-thumb { width: 104px; height: 84px; display: flex; align-items: center; justify-content: center; font-size: 34px; border-radius: 8px; background: #f6f1e7; }
+.media-thumb-card figcaption span:first-child { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-thumb-audio { width: 104px; height: 84px; }
+.media-thumb-video { width: 104px; height: 84px; object-fit: contain; border-radius: 8px; background: #000; }
+.btn.recording { color: #b00020; border-color: #b00020; animation: recordPulse 1.2s ease-in-out infinite; }
+@keyframes recordPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(176,0,32,.15); } 50% { box-shadow: 0 0 0 6px rgba(176,0,32,.12); } }
+@media (prefers-reduced-motion: reduce) { .btn.recording { animation: none; } }
 /* 编辑器图片版式面板 */
 .media-editor { display: grid; gap: 10px; }
 .doc-style-controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
@@ -1273,6 +1285,19 @@ a.tag:hover {
 }
 .filter-type-chips { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
 .filter-type-chips .type-chip.active { border-color: var(--accent); color: var(--accent); background: #fff; }
+
+.md-editor-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.md-color-label { display: inline-flex; align-items: center; gap: 4px; font-size: 18px; min-height: 36px; cursor: pointer; }
+.md-color-label input[type="color"] { width: 34px; height: 30px; padding: 0; border: 1px solid var(--line, #e6dfd2); border-radius: 6px; background: #fff; }
+.orphan-fields { display: grid; gap: 10px; }
+.orphan-field-group { border: 1px solid var(--line, #e6dfd2); border-radius: 8px; padding: 8px; background: #fbf8f1; }
+.orphan-field-group-name { font-size: .86em; font-weight: 600; margin-bottom: 6px; color: var(--muted, #786f62); }
+.orphan-field-row { display: grid; grid-template-columns: minmax(70px, .8fr) minmax(90px, 1.4fr) auto; gap: 8px; align-items: center; padding: 4px 0; border-top: 1px dashed rgba(180,165,140,.35); }
+.orphan-field-row:first-of-type { border-top: 0; }
+.orphan-field-row code { overflow-wrap: anywhere; }
+.orphan-field-row span { min-width: 0; overflow-wrap: anywhere; }
+.photo-thumb-actions { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.photo-thumb figcaption { align-items: flex-start; }
 
 /* ── 富文本工具栏与预览（md-toolbar / md-editor）── */
 .md-editor { position: relative; }

@@ -205,7 +205,7 @@ $('new-folder-btn').addEventListener('click', openNewFolder);
 $('search-input').addEventListener('input', (e) => { searchQuery = e.target.value; render(); });
 $('new-note-btn').addEventListener('click', () => {
   // 目录页直接新建：统一进入独立编辑页，保存后回目录并高亮新记录
-  location.href = `editor.html?type=note&ret=${encodeURIComponent('folders.html')}`;
+  location.href = `editor.html?type=general&ret=${encodeURIComponent('folders.html')}`;
 });
 // 数据管理入口（⚙️ 数据）：导入/备份/导出生成/类型/标签——共享模块（20260911 回归修复）
 mountDataActions({ onChange: render, getCurrentType: () => null });

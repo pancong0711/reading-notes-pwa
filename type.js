@@ -11,8 +11,8 @@ import { mountDataActions } from './data-actions.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const key = params.get('t') || 'note';
-const currentType = NoteTypes.getType(key) || NoteTypes.getType('note');
+const key = params.get('t') || 'general';
+const currentType = NoteTypes.getType(key) || NoteTypes.getType('general');
 
 let notesCache = [];
 let conceptCatalog = [];
@@ -59,7 +59,7 @@ function currentReturnUrl() {
 }
 
 function newNoteHref() {
-  const t = currentType.pseudo ? 'note' : currentType.key;
+  const t = currentType.pseudo ? 'general' : currentType.key;
   return `editor.html?type=${encodeURIComponent(t)}&ret=${encodeURIComponent(currentReturnUrl())}`;
 }
 
@@ -222,7 +222,7 @@ async function initFilterBar() {
   if (currentType.key === 'all' && !$('filter-bar').querySelector('.filter-type-chips')) {
     const chips = document.createElement('div');
     chips.className = 'filter-type-chips';
-    chips.innerHTML = ['all', 'note', 'diary', 'log', 'memo']
+    chips.innerHTML = ['all', 'general', 'note', 'diary', 'log', 'memo']
       .map((k) => {
         const t = NoteTypes.getType(k);
         return `<button type="button" class="btn ghost small type-chip${k === 'all' ? ' active' : ''}" data-type-chip="${k}">${t ? t.icon + ' ' + esc(t.label) : k}</button>`;
@@ -284,7 +284,7 @@ $('filter-bar').addEventListener('click', (e) => {
     } else if (params.get('new')) {
       const project = params.get('project') || 'other';
       const ret = encodeURIComponent('folders.html');
-      location.replace(`editor.html?type=${encodeURIComponent(key || 'note')}&project=${encodeURIComponent(project)}&ret=${ret}`);
+      location.replace(`editor.html?type=${encodeURIComponent(key || 'general')}&project=${encodeURIComponent(project)}&ret=${ret}`);
     } else {
       location.replace('folders.html');
     }

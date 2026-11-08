@@ -7,6 +7,7 @@
  *
  * 语法配置三型：
  *   inline      选区包裹型（粗体/斜体/高亮/行内码/删除线/行内公式）——选区非空包住选区，空选区插占位
+ *   span        受控逐字格式（字号/颜色/下划线）——输出 [文字]{size=… color=… underline=1}
  *   linePrefix  行首前缀型（标题/引用/无序/有序列表）——在光标所在行行首插入前缀
  *   template    模板插入型（代码块/表格/块级公式）——在光标处插入多行模板
  */
@@ -19,6 +20,11 @@ export const BUTTONS = [
   { key: 'code', label: '<>', title: '行内代码', inline: ['`', '`'] },
   { key: 'strike', label: 'S', title: '删除线', inline: ['~~', '~~'] },
   { key: 'math', label: 'ƒ', title: '行内公式 $…$（TeX）', inline: ['$', '$'] },
+  { key: 'size-small', label: 'A−', title: '逐字小字号', span: { size: 'small' } },
+  { key: 'size-normal', label: 'A', title: '逐字标准字号', span: { size: 'normal' } },
+  { key: 'size-large', label: 'A+', title: '逐字大字号', span: { size: 'large' } },
+  { key: 'size-xlarge', label: 'A++', title: '逐字特大字号', span: { size: 'xlarge' } },
+  { key: 'underline', label: 'U', title: '逐字下划线', span: { underline: '1' } },
   { key: 'math-block', label: 'ƒƒ', title: '块级公式 $$…$$', template: '$$\n\\frac{a}{b}\n$$', placeholder: false },
   { key: 'h2', label: 'H', title: '标题（## ）', linePrefix: '## ' },
   { key: 'quote', label: '❝', title: '引用（> ）', linePrefix: '> ' },
@@ -66,6 +72,25 @@ export function wrapSelection(value, selStart, selEnd, cfg) {
     }
     const next = v.slice(0, ls) + prefix + v.slice(ls);
     return { value: next, selStart: s + prefix.length, selEnd: e + prefix.length };
+  }
+
+  // 受控逐字格式：输出 Pandoc 风格 span 属性
+  if (cfg.span) {
+    const parts = [];
+    for (const [k, v] of Object.entries(cfg.span || {})) {
+      if (v == null || v === '') continue;
+      parts.push(`${k}=${String(v)}`);
+    }
+    const before = '[';
+    const after = `]{${parts.join(' ')}}`;
+    const selected = v.slice(s, e);
+    if (selected) {
+      const next = v.slice(0, s) + before + selected + after + v.slice(e);
+      return { value: next, selStart: s + before.length, selEnd: s + before.length + selected.length };
+    }
+    const placeholder = cfg.placeholder || '内容';
+    const next = v.slice(0, s) + before + placeholder + after + v.slice(e);
+    return { value: next, selStart: s + before.length, selEnd: s + before.length + placeholder.length };
   }
 
   // 选区包裹型

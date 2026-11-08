@@ -67,7 +67,7 @@ function editorHref(id = '') {
   const ret = encodeURIComponent(returnUrl());
   return id
     ? `editor.html?id=${encodeURIComponent(id)}&ret=${ret}`
-    : `editor.html?type=note&project=${encodeURIComponent(folderPath)}&ret=${ret}`;
+    : `editor.html?type=general&project=${encodeURIComponent(folderPath)}&ret=${ret}`;
 }
 
 async function loadData() {

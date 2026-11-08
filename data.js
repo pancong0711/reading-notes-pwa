@@ -39,6 +39,7 @@
  */
 
 import { normalizeProject, OTHERS as OTHERS_FOLDER, rebasePath } from './folder-util.js';
+import { normalizeTypeData, normalizeExtensions } from './type-fields.js';
 
 const DB_NAME = 'reading-notes';
 const DB_VERSION = 8;   // v2：type 索引；v3：books store；v4：concept_catalog；v5：graph_local；v6：image_store；v7：folder_store；v8：editor_draft（编辑器草稿；diary.js 同步升级）
@@ -198,7 +199,7 @@ function normalizeNote(raw, index, ctx) {
   const id = raw.id != null ? String(raw.id) : `note-${Date.now()}-${++_noteSeq}`;
   return {
     id,
-    type: raw.type || 'note',        // 记录类型：note（阅读笔记）/ diary（日记）/ 自定义
+    type: raw.type || 'note',        // 记录类型：general/note/diary/log/memo/自定义；旧记录缺失按 note 兼容
     title: raw.title || '未命名笔记',
     book: raw.book || '',
     author: raw.author || '',
@@ -231,7 +232,9 @@ function normalizeNote(raw, index, ctx) {
     history: Array.isArray(raw.history)
       ? raw.history.filter((e) => e && typeof e === 'object' && e.k).slice(-20)
       : [],                        // 简要年表（需求 20260922 C：仅内容类事件，FIFO≤20，v1 本端不入包）
-    meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {},   // 类型特有字段（memo: done/due 等）
+    meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {},   // 类型特有字段（memo: done/due 等，旧兼容路径）
+    typeData: normalizeTypeData(raw.typeData),   // 各类型字段快照（切换类型不丢）
+    extensions: normalizeExtensions(raw.extensions),   // 未知扩展字段（标量）
     createdAt: raw.createdAt || Date.now(),
     // 导入路径（ctx.tsFallback）锚定包 exportedAt：导入是搬运、不是编辑（需求 20260922
     // 时间戳语义修复）；仅无 ctx 的本地常规新增才兜底当前时间。
@@ -343,7 +346,7 @@ export async function getAllBooks() {
   // 聚合：仅统计 type 非 diary 的笔记，book 字段非空去重
   const byBook = new Map();
   for (const n of allNotes) {
-    if ((n.type || 'note') === 'diary') continue;
+    if ((n.type || 'note') !== 'note') continue;
     const name = typeof n.book === 'string' ? n.book.trim() : '';
     if (!name) continue;
     let agg = byBook.get(name);
@@ -889,7 +892,7 @@ export async function countNotes() {
  * tags / project / pinned 纯归属变化**不入账、不推时钟**（与 20260922 时间戳语义一致）。
  * 摘要只记元数据（字数/标题/日期/图片/概念数量），不存正文快照。
  */
-const CONTENT_FIELDS = ['title', 'content', 'date', 'readerNote', 'aiNote', 'imageData', 'quotes', 'extension'];
+const CONTENT_FIELDS = ['type', 'title', 'content', 'date', 'readerNote', 'aiNote', 'imageData', 'quotes', 'extension', 'typeData', 'extensions', 'media', 'style'];
 
 function historySummary(oldRec, rec) {
   const parts = [];

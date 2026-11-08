@@ -1,6 +1,6 @@
 /* types.js —— 记录类型注册表（普通 script，无依赖，file:// 兼容）
  *
- * 内置 4 类，用户可自定义增删改；自定义类型持久化在 localStorage('note-types')。
+ * 内置 5 类，用户可自定义增删改；自定义类型持久化在 localStorage('note-types')。
  *
  * 统一记录模型（所有类型同一结构，type 字段区分）：
  *   { id, type, title, date, createdAt, updatedAt,
@@ -20,6 +20,8 @@
   var BUILTIN = [
     { key: 'all',   label: '全部记录', icon: '🗂️', fields: [], builtin: true, pseudo: true,
       hint: '跨类型浏览，可按类型筛选' },
+    { key: 'general', label: '一般笔记', icon: '📝', fields: [], builtin: true,
+      hint: '通用图文笔记，可自由书写' },
     { key: 'note',  label: '阅读笔记', icon: '📖', fields: ['book', 'pages'], builtin: true,
       hint: '拍书页 + 读者注 + AI注' },
     { key: 'diary', label: '日记',     icon: '📓', fields: [], builtin: true,
@@ -148,7 +150,7 @@
     items.forEach(function (item) {
       if (!item || typeof item !== 'object') return;
       var key = String(item.key || '').trim().toLowerCase();
-      if (!validKey(key) || ['note','diary','log','memo','all'].includes(key)) return;   // 内置不可覆盖
+      if (!validKey(key) || ['general','note','diary','log','memo','all'].includes(key)) return;   // 内置不可覆盖
       var nt = normalizeCustom(item);
       var idx = list.findIndex(function (t) { return t.key === key; });
       if (idx >= 0) list[idx] = nt; else list.push(nt);
@@ -179,6 +181,8 @@
     updateType: updateType,
     removeType: removeType,
     fieldMeta: fieldMeta,
+    fieldKeys: function () { return Object.keys(FIELD_META); },
+    builtinKeys: ['general', 'note', 'diary', 'log', 'memo', 'all'],
     exportTypes: exportTypes,
     importTypes: importTypes,
     renderNav: renderNav,

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#c9a96e">
   <title>编辑笔记 · 读书笔记</title>
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20261107a">
+  <link rel="stylesheet" href="styles.css?v=20261107c">
   <script src="reading-font.js"></script>
 </head>
 <body class="editor-body">
@@ -34,20 +34,26 @@
     </div>
 
     <div id="editor" class="editor editor-page-card">
-      <!-- 图片：相机与相册分离；相册 input 不带 capture，支持多选 -->
+      <!-- 多媒体：拍照/长按录像、相册、麦克风录音、完整本机文件入口 -->
       <section class="editor-photo-section" aria-labelledby="photo-section-title">
         <div class="editor-section-head">
-          <h2 id="photo-section-title">书页/图片</h2>
-          <span class="muted">可拍一张或多张，也可从手机相册选择</span>
+          <h2 id="photo-section-title">图片 / 多媒体</h2>
+          <span class="muted">图片、录音、视频、PDF/Office/压缩包等附件</span>
         </div>
         <input type="file" id="photo-input-camera" accept="image/*" capture="environment" hidden>
-        <input type="file" id="photo-input-gallery" accept="image/*" multiple hidden>
+        <input type="file" id="photo-input-video" accept="video/*" capture="environment" hidden>
+        <input type="file" id="photo-input-gallery" accept="image/*,video/*,audio/*" multiple hidden>
+        <!-- 关键：不带 accept，打开系统完整文件浏览器，覆盖所有本机文件夹；代码按 MIME 分流 -->
+        <input type="file" id="media-input-file" multiple hidden>
         <div class="photo-source-buttons">
-          <button class="btn ghost" id="photo-camera-btn" type="button">📷 拍照</button>
-          <button class="btn ghost" id="photo-gallery-btn" type="button">🖼 从相册选择</button>
+          <button class="btn ghost" id="photo-camera-btn" type="button" title="单击拍照；长按录像">📷 拍照 / 长按录像</button>
+          <button class="btn ghost" id="photo-gallery-btn" type="button">🖼 相册</button>
+          <button class="btn ghost" id="audio-record-btn" type="button">🎙 录音</button>
+          <button class="btn ghost" id="media-file-btn" type="button">📂 本机文件</button>
         </div>
+        <p class="field-hint audio-record-status" id="audio-record-status" hidden></p>
         <div class="photo-strip" id="photo-strip"></div>
-        <p class="field-hint" id="photo-hint">图片会压缩后保存在本机；正文中可用图片版式调整方向、宽度与对齐。</p>
+        <p class="field-hint" id="photo-hint">图片会压缩后保存在本机；音频/视频/文档按原文件保存。所有媒体均可在正文光标处插入。</p>
       </section>
 
       <label class="field editor-title-field">标题
@@ -60,7 +66,13 @@
           <div class="md-toolbar" id="md-toolbar" role="toolbar" aria-label="文本格式"></div>
           <textarea id="f-content" rows="10" placeholder="写下内容……（支持 **粗体**、*斜体*、==高亮==、公式 $E=mc^2$、$$…$$ 等）"></textarea>
           <div class="md-preview note-md" id="md-preview" hidden></div>
-          <button type="button" class="btn ghost small" id="md-preview-toggle">👁 预览</button>
+          <div class="md-editor-actions">
+            <button type="button" class="btn ghost small" id="insert-image-btn">＋ 插入媒体到光标</button>
+            <label class="md-color-label" title="选中文字后设置颜色">🎨
+              <input type="color" id="md-color-input" value="#c0392b" aria-label="文字颜色">
+            </label>
+            <button type="button" class="btn ghost small" id="md-preview-toggle">👁 预览</button>
+          </div>
         </div>
       </div>
 
@@ -75,6 +87,11 @@
             <select id="f-type"></select>
           </label>
           <div id="type-fields"></div>
+          <div class="field orphan-fields-field" id="orphan-fields-field" hidden>
+            <span>其他字段（当前类型未使用）</span>
+            <div id="orphan-fields" class="orphan-fields"></div>
+            <p class="field-hint">切换类型后旧字段会保留在这里；可切回原类型恢复使用，或点「删除」明确移除。</p>
+          </div>
           <label class="field">日期
             <input id="f-date" type="date">
           </label>
@@ -119,9 +136,9 @@
         <summary>格式、图片版式与文档样式</summary>
         <div class="editor-advanced-body">
           <div class="field" id="media-editor-field" hidden>
-            <span>图片版式（非破坏性：原图不变）</span>
+            <span>媒体版式（非破坏性：原文件不变）</span>
             <div id="media-editor" class="media-editor"></div>
-            <p class="field-hint">旋转/宽度/对齐仅保存为 JSON 显示属性；导出 Markdown 时写入图片属性后缀。</p>
+            <p class="field-hint">图片支持旋转/宽度/对齐；音频/视频/文档显示为受控播放器或附件链接，不自动播放。</p>
           </div>
 
           <label class="field">正文格式
@@ -144,6 +161,9 @@
               <label>行距 <select id="f-line-height">
                 <option value="compact">紧凑</option><option value="normal">标准</option>
                 <option value="loose">宽松</option>
+              </select></label>
+              <label>首行缩进 <select id="f-first-line-indent">
+                <option value="none">无</option><option value="2em">全文缩进 2 字符</option>
               </select></label>
             </div>
             <span class="field-hint">只允许白名单字体/对齐/行距，PWA 与 PDF 同口径。</span>
@@ -180,6 +200,6 @@
   <script src="sw-register.js"></script>
   <script src="panel-modal.js"></script>
   <script src="types.js"></script>
-  <script type="module" src="editor.js?v=20261107a"></script>
+  <script type="module" src="editor.js?v=20261107c"></script>
 </body>
 </html>

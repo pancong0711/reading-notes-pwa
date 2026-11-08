@@ -5,8 +5,8 @@
  *   · 正文 content 用 markdown-lite 渲染（受控子集、先转义安全）
  *   · readerNote / aiNote 分段展示（AI注 附标注）
  *   · tags chips、concepts chips（id → 名称映射，含来源标注）——可点击跳记录页按标签/概念过滤（20260905-批次二 F3）
- *   · pages、images 渲染：note.images 为 PWA 相对路径（'assets/…'，CLI sync 已复制）
- *     或 note.imageData（base64）；点击开新标签看大图
+ *   · 正文内媒体按 Markdown 顺序渲染；未进入正文的图片/音频/视频/附件
+ *     归入「未插入正文的附件」托盘
  *   · 无内容时占位「（无更多内容）」
  *
  * 纯字符串拼接、无 DOM 依赖：浏览器与 node 测试均可加载。
@@ -58,8 +58,7 @@ function baseName(p) {
 }
 
 function imagesHtml(note) {
-  // 统一 JSON sidecar 的正文常已包含 ![](…) 图片链接；images 列表仅用于媒体同步/缺失诊断。
-  // 若同一图片已在正文出现，则不再重复渲染，避免“正文一张 + 原文图片又一张”。
+  // 正文已内嵌的媒体不再重复；其余进入「未插入正文的附件」托盘。
   const inlineNames = new Set();
   if (note && typeof note.content === 'string') {
     for (const m of note.content.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
@@ -67,12 +66,20 @@ function imagesHtml(note) {
     }
   }
   const media = normalizeMediaList(note.media);
-  const list = (Array.isArray(note.images) ? note.images : [])
-    .filter((src) => !inlineNames.has(baseName(src)))
-    .map((src) => ({ src, media: mediaForSrc(media, src) }))
-    .concat(note.imageData ? [{ src: note.imageData, media: mediaForSrc(media, 'imageData') || { src: note.imageData, id: 'imageData' } }] : []);
+  const seen = new Set();
+  const list = [];
+  const push = (src, item) => {
+    if (!src) return;
+    const key = baseName(src);
+    if (!key || seen.has(key) || inlineNames.has(key)) return;
+    seen.add(key);
+    list.push({ src, media: item || mediaForSrc(media, src) || { src } });
+  };
+  for (const m of media) push(m.src, m);
+  for (const src of (Array.isArray(note.images) ? note.images : [])) push(src);
+  if (note.imageData) push(note.imageData, mediaForSrc(media, 'imageData') || { src: note.imageData, id: 'imageData', kind: 'image' });
   if (!list.length) return '';
-  return section('原文图片', `<div class="note-images">${list.map((it) => imageHtml(it.src, it.media)).join('')}</div>`);
+  return section('未插入正文的附件', `<div class="note-images">${list.map((it) => imageHtml(it.src, it.media)).join('')}</div>`);
 }
 
 /**
