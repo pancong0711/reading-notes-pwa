@@ -10,7 +10,7 @@
 import { getNoteById, getConceptCatalog } from './data.js';
 import { renderNoteDetailInto } from './note-detail.js';
 import { sourceBadge } from './source-import.js';
-import { shareNoteAsHtml, shareNoteAsJson } from './share.js';
+import { prepareShareFiles, sharePreparedFile } from './share.js';
 import { renderSpreadsheetPreviews } from './spreadsheet-preview.js';
 import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
 
@@ -26,6 +26,8 @@ function esc(s) {
  * 数据未就绪时按钮 disabled；getNoteById 成功后立即启用。 */
 let currentNote = null;
 let currentCatalogById = {};
+let currentSharePrepared = null;
+let currentSharePreparing = null;
 const editBtn = $('edit-btn');
 const shareBtn = $('share-btn');
 const sharePop = $('share-pop');
@@ -42,18 +44,33 @@ function toggleSharePop(force) {
   shareBtn.setAttribute('aria-expanded', String(!sharePop.hidden));
 }
 
+function ensureSharePrepared() {
+  if (currentSharePrepared) return Promise.resolve(currentSharePrepared);
+  if (currentSharePreparing) return currentSharePreparing;
+  if (!currentNote) return Promise.reject(new Error('笔记尚未加载'));
+  currentSharePreparing = prepareShareFiles(currentNote, currentCatalogById)
+    .then((prepared) => { currentSharePrepared = prepared; return prepared; })
+    .finally(() => { currentSharePreparing = null; });
+  return currentSharePreparing;
+}
+
 async function doShare(kind) {
   if (!currentNote) return;
   toggleSharePop(false);
   shareBtn.disabled = true;
   const oldText = shareBtn.textContent;
-  shareBtn.textContent = '生成中…';
   try {
-    const result = kind === 'json'
-      ? await shareNoteAsJson(currentNote)
-      : await shareNoteAsHtml(currentNote, currentCatalogById);
+    let prepared = currentSharePrepared;
+    if (!prepared) {
+      shareBtn.textContent = '准备中…';
+      toast('正在生成分享文件，请稍候…', 2200);
+      prepared = await ensureSharePrepared();
+    }
+    shareBtn.textContent = '分享中…';
+    const result = await sharePreparedFile(currentNote, prepared, kind);
     if (result.mode === 'shared') toast('已打开系统分享面板');
-    else if (result.mode === 'downloaded') toast('当前浏览器不支持文件分享，已下载分享文件');
+    else if (result.mode === 'needs-gesture') toast('分享文件已准备好，请再点一次分享', 4200);
+    else if (result.mode === 'downloaded') toast('当前浏览器不支持直接分享文件，已下载；请从文件管理器转发', 5200);
     else toast('已取消分享');
   } catch (e) {
     console.error('[share]', e);
@@ -159,6 +176,7 @@ async function load() {
     ((catalog && catalog.concepts) || []).forEach((c) => { catalogById[c.id] = c; });
   } catch (e) { /* 目录缺失时按 id 显示 */ }
   currentCatalogById = catalogById;
+  setTimeout(() => { ensureSharePrepared().catch(() => {}); }, 800);
 
   const body = $('note-body');
   await renderNoteDetailInto(body, note, catalogById);
@@ -177,6 +195,7 @@ shareBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   if (!currentNote) return;
   toggleSharePop();
+  ensureSharePrepared().catch(() => {});
 });
 sharePop.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-share-kind]');

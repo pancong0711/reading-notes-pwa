@@ -85,16 +85,21 @@ export async function buildShareJson(note) {
   return exportNotePackage({ notes: [note], includeImages: true });
 }
 
-/** 优先系统分享文件；不支持或失败时下载。返回 {mode:'shared'|'downloaded'|'cancelled'}。 */
+/** 优先系统分享文件；不支持或失败时下载。
+ * 返回 {mode:'shared'|'downloaded'|'cancelled'|'needs-gesture'}。
+ * 注意：不把 canShare() 作为硬门槛——部分浏览器能分享但 canShare 返回 false。
+ */
 export async function shareOrDownloadFile(file, { title = '', text = '' } = {}) {
-  try {
-    if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+  if (navigator.share) {
+    try {
       await navigator.share({ files: [file], title, text });
       return { mode: 'shared' };
+    } catch (e) {
+      if (e && e.name === 'AbortError') return { mode: 'cancelled' };
+      // Web Share 需要用户手势；异步生成后首次调用可能在此报 NotAllowedError。
+      if (e && e.name === 'NotAllowedError') return { mode: 'needs-gesture' };
+      // 其他失败（如系统不支持该文件类型）继续走下载兜底。
     }
-  } catch (e) {
-    if (e && e.name === 'AbortError') return { mode: 'cancelled' };
-    // 分享 API 失败时继续走下载兜底
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(file);
@@ -102,6 +107,28 @@ export async function shareOrDownloadFile(file, { title = '', text = '' } = {}) 
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 30000);
   return { mode: 'downloaded' };
+}
+
+/** 预先构建 HTML/JSON 文件，避免用户点击分享后才长时间异步生成。 */
+export async function prepareShareFiles(note, catalogById) {
+  const [{ imageFiles }, jsonPkg] = await Promise.all([
+    collectImageFiles([note]),
+    buildShareJson(note),
+  ]);
+  const html = buildShareHtml(note, imageFiles, catalogById);
+  const htmlFile = new File([html], safeFilename(note.title, 'html'), { type: 'text/html' });
+  const jsonFile = new File([JSON.stringify(jsonPkg, null, 2)], safeFilename(note.title, 'json'), { type: 'application/json' });
+  return { htmlFile, jsonFile };
+}
+
+/** 使用预生成文件直接触发系统分享（文件已就绪时不会先等待异步读取）。 */
+export async function sharePreparedFile(note, prepared, kind) {
+  const file = kind === 'json' ? prepared && prepared.jsonFile : prepared && prepared.htmlFile;
+  if (!file) throw new Error('分享文件尚未生成');
+  return shareOrDownloadFile(file, {
+    title: note.title || '读书笔记',
+    text: kind === 'json' ? 'JSON 笔记包（媒体已内嵌）' : '自包含 HTML 笔记（媒体已内嵌）',
+  });
 }
 
 export async function shareNoteAsHtml(note, catalogById) {
@@ -117,4 +144,4 @@ export async function shareNoteAsJson(note) {
   return shareOrDownloadFile(file, { title: note.title || '读书笔记', text: 'JSON 笔记包（图片已内嵌）' });
 }
 
-export default { buildShareHtml, buildShareJson, inlineMediaDataUrls, shareOrDownloadFile, shareNoteAsHtml, shareNoteAsJson };
+export default { buildShareHtml, buildShareJson, inlineMediaDataUrls, shareOrDownloadFile, prepareShareFiles, sharePreparedFile, shareNoteAsHtml, shareNoteAsJson };
