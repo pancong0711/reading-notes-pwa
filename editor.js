@@ -31,7 +31,7 @@ import { renderHtmlPreviewInto } from './html-doc.js';
 import {
   mediaFromMarkdown, mergeMediaLists, normalizeMediaItem, normalizeMediaList,
   applyMediaAttrsToMarkdown, safeMediaSrc,
-  insertMarkdownImagesAtCursor, removeMarkdownImageBySrc, markdownHasImageSrc,
+  insertMarkdownImagesAtCursor, removeMarkdownImageBySrc, markdownHasImageSrc, applyRotatedMediaLayout,
   inferMediaKind, mediaExtension, mediaKindLabel, isAllowedMediaFile, isHeicFile,
 } from './media-util.js';
 import { normalizeDocStyle, styleToCss, FONT_OPTIONS } from './doc-style.js';
@@ -70,6 +70,7 @@ const els = {
   mediaFileBtn: $('media-file-btn'),
   audioRecordStatus: $('audio-record-status'),
   photoStrip: $('photo-strip'),
+  mediaLibrarySummary: $('media-library-summary'),
   photoHint: $('photo-hint'),
   fType: $('f-type'),
   typeFields: $('type-fields'),
@@ -322,7 +323,7 @@ function renderMediaStrip() {
       const inBody = markdownHasImageSrc(els.fContent?.value || '', src);
       const srcView = safeMediaSrc(displayMediaSrc(src));
       const preview = m.kind === 'image' && srcView
-        ? `<img class="media-card-img" src="${esc(srcView)}" alt="${esc(label)}">`
+        ? `<img class="media-card-img${m.rotate ? ' media-card-img-rotated' : ''}" src="${esc(srcView)}" alt="${esc(label)}" style="transform:rotate(${Number(m.rotate || 0)}deg)">`
         : `<div class="media-file-thumb" aria-hidden="true">${esc(mediaKindLabel(m.kind))}</div>`;
       const rotateButtons = (m.kind === 'image' || m.kind === 'video')
         ? `<button type="button" class="btn ghost small" data-media-rotate="left" data-media-rotate-idx="${i}">左转90°</button>
@@ -352,6 +353,7 @@ function renderMediaStrip() {
       </article>`;
     }).join('');
   }
+  if (els.mediaLibrarySummary) els.mediaLibrarySummary.textContent = `媒体库（${mediaSources.length}）`;
   if (els.photoHint) {
     els.photoHint.textContent = mediaSources.length
       ? `已添加 ${mediaSources.length} 个媒体附件；图片/视频可直接旋转；新附件自动插入光标处。`
@@ -871,7 +873,10 @@ function renderPreviewContent() {
   if (els.mdPreview) els.mdPreview.style.cssText = css;
   if (editorFormat === 'html') renderHtmlPreviewInto(els.mdPreview, text, { style: css });
   else if (editorFormat === 'text') els.mdPreview.innerHTML = `<pre class="note-text" style="${esc(css)}">${esc(text)}</pre>`;
-  else els.mdPreview.innerHTML = renderPreview(text);
+  else {
+    els.mdPreview.innerHTML = renderPreview(text);
+    applyRotatedMediaLayout(els.mdPreview);
+  }
 }
 
 async function toggleMdPreview() {

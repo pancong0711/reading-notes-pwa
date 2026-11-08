@@ -303,6 +303,39 @@ export function markdownHasImageSrc(content, src) {
   return re.test(String(content || ''));
 }
 
+/** 让 CSS rotate 图片仍然占据正确的布局尺寸。
+ * 默认 CSS transform 不改变布局盒；90/270° 时按图片长宽比换算显示宽高，
+ * 避免旋转后与其他图片宽度/高度不一致。
+ */
+export function applyRotatedMediaLayout(root) {
+  if (!root || typeof root.querySelectorAll !== 'function') return;
+  root.querySelectorAll('figure[data-kind="image"][data-rotate="90"], figure[data-kind="image"][data-rotate="270"]').forEach((fig) => {
+    const img = fig.querySelector('img');
+    if (!img) return;
+    const update = () => {
+      const nw = Number(img.naturalWidth || 0);
+      const nh = Number(img.naturalHeight || 0);
+      if (!nw || !nh) return;
+      const pct = Math.max(10, Math.min(100, Number(fig.dataset.width || 100) || 100));
+      const frameW = Math.max(1, fig.clientWidth || fig.parentElement?.clientWidth || img.clientWidth || 1);
+      const targetW = frameW * pct / 100;
+      const preRotateW = targetW * (nw / nh);
+      img.style.width = `${preRotateW}px`;
+      img.style.maxWidth = 'none';
+      img.style.maxHeight = 'none';
+      img.style.height = 'auto';
+      fig.style.height = `${preRotateW}px`;
+      fig.style.minHeight = `${preRotateW}px`;
+      fig.style.display = 'flex';
+      fig.style.alignItems = 'center';
+      fig.style.justifyContent = 'center';
+      fig.style.overflow = 'hidden';
+    };
+    if (img.complete) update();
+    else img.addEventListener('load', update, { once: true });
+  });
+}
+
 function escAttr(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
@@ -362,5 +395,6 @@ export default {
   inferMediaKind, mediaExtension, mediaKindLabel, MEDIA_KINDS,
   isAllowedMediaFile, isHeicFile, ALLOWED_ATTACHMENT_EXTS,
   insertMarkdownImagesAtCursor, removeMarkdownImageBySrc, markdownHasImageSrc,
+  applyRotatedMediaLayout,
   safeMediaSrc, safeMediaHref,
 };

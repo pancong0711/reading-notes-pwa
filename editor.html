@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#c9a96e">
   <title>编辑笔记 · 读书笔记</title>
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20261107g">
+  <link rel="stylesheet" href="styles.css?v=20261107h">
   <script src="reading-font.js"></script>
 </head>
 <body class="editor-body">
@@ -52,7 +52,10 @@
           <button class="btn ghost" id="media-file-btn" type="button">📂 本机文件（可多选）</button>
         </div>
         <p class="field-hint audio-record-status" id="audio-record-status" hidden></p>
-        <div class="media-unified-strip" id="photo-strip"></div>
+        <details class="media-library" id="media-library" open>
+          <summary id="media-library-summary">媒体库（0）</summary>
+          <div class="media-unified-strip" id="photo-strip"></div>
+        </details>
         <p class="field-hint" id="photo-hint">相册/本机文件支持多选；系统相机每次拍照一张，可连续点按。图片压缩、HEIC 自动转 JPEG。</p>
       </section>
 
@@ -194,6 +197,6 @@
   <script src="sw-register.js"></script>
   <script src="panel-modal.js"></script>
   <script src="types.js"></script>
-  <script type="module" src="editor.js?v=20261107g"></script>
+  <script type="module" src="editor.js?v=20261107h"></script>
 </body>
 </html>

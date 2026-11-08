@@ -14,7 +14,7 @@
 import { renderMarkdown } from './vendor/markdown-lite.js';
 import { typesetInto } from './vendor/mathjax3/mathjax-boot.js';
 import { renderHtmlFrame, sanitizeHtmlForPrint } from './html-doc.js';
-import { renderMediaFigure, mediaForSrc, normalizeMediaList } from './media-util.js';
+import { renderMediaFigure, mediaForSrc, normalizeMediaList, applyRotatedMediaLayout } from './media-util.js';
 import { styleToCss } from './doc-style.js';
 import { sourceBadge } from './source-import.js';
 
@@ -142,6 +142,7 @@ export function renderNoteDetail(note, catalogById, opts = {}) {
  */
 export async function renderNoteDetailInto(el, note, catalogById) {
   el.innerHTML = renderNoteDetail(note, catalogById);
+  applyRotatedMediaLayout(el);
   if (el.querySelector) {
     try { await typesetInto(el); } catch { /* 排版失败不影响展示 */ }
   }
