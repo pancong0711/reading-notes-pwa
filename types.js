@@ -4,7 +4,7 @@
  *
  * 统一记录模型（所有类型同一结构，type 字段区分）：
  *   { id, type, title, date, createdAt, updatedAt,
- *     content, readerNote, aiNote, images, imageData, meta }
+ *     content, media, images, readerNote, aiNote, imageData, typeData, extensions, meta }
  *   - type 来自本注册表（key）
  *   - fields 控制该类型编辑表单显示哪些附加字段：
  *       book/pages → 顶层字段（阅读笔记）；done/due → meta（备忘）

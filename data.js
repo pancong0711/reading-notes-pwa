@@ -4,11 +4,11 @@
  * 基于 IndexedDB 的本地存储：
  *   数据库：reading-notes
  *   对象仓库：notes（主键 id，附 book / date 索引）、books（主键 name）
- *   单条记录：{ id, title, book, author, date, tags, rating, pages,
- *              content, images, readerNote, aiNote, imageData, concepts }
- *     - readerNote：读者注（读者自己的思考）
- *     - aiNote：AI注（与 AI 咨询的内容 / 应读者要求由 AI 补充的说明）
- *     - imageData：新建笔记时拍照/选图的压缩 base64 缩略图
+ *   单条记录：{ id, type, title, date, content, media, images, readerNote,
+ *              aiNote, imageData, typeData, extensions, concepts, ... }
+ *     - media：image/audio/video/file 四类附件（src/kind/name/mime/caption/版式）
+ *     - imageData：旧版首张图片的 base64 兼容字段（新流程优先 media + assets 路径）
+ *     - typeData/extensions：类型字段快照与未知扩展字段
  *     - concepts：概念级标签 [{id, source}]，source ∈ user|ai
  *   书籍元信息（books store，主键 name）：
  *     { name, author, status, rating, tags, summary, cover, started, finished }
@@ -18,7 +18,7 @@
  *
  * 对外提供：
  *   importNotePackage(json)  —— 清空重建，导入整包（接受 { notes, books } / { notes } / 裸数组）
- *   exportNotePackage()      —— 导出 { notes: [...], books: [...], exportedAt }
+ *   exportNotePackage()      —— 导出 { notes: [...], books: [...], exportedAt }（可选 imageFiles 含媒体附件）
  *   getAllNotes()            —— 读取全部笔记（按 date 降序，无日期排最后）
  *   countNotes()             —— 笔记总数
  *   addNote(note)            —— 新增/更新单条笔记（返回 id）
@@ -1518,7 +1518,7 @@ export async function getImageFile(path) {
 }
 
 /**
- * 摄取迁移包的 imageFiles（{ 'assets/…': dataURL }）→ 逐条写入 image_store。
+ * 摄取迁移包的 imageFiles（{ 'assets/…': dataURL }，媒体/附件通用）→ 逐条写入 Blob 仓。
  * @returns {Promise<number>} 摄取张数
  */
 export async function ingestImageFiles(imageFiles) {
@@ -1531,7 +1531,7 @@ export async function ingestImageFiles(imageFiles) {
 }
 
 /**
- * 收集范围内笔记引用的图片 → imageFiles 映射（导出迁移包含图）。
+ * 收集范围内笔记引用的媒体/附件 → imageFiles 映射（导出迁移包含图片/音频/视频/文档）。
  * @param {Array<object>} notes  已按范围过滤的记录
  * @param {Function} [fetcher]  取图函数（默认 fetch；可注入便于单测）——返回 Response-like
  * @returns {Promise<{imageFiles: object, missing: string[]}>}
