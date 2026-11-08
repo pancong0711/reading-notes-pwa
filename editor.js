@@ -422,13 +422,17 @@ function insertMediaItemsIntoBody(items) {
 
 async function addMediaFiles(files) {
   const list = Array.from(files || []).filter(Boolean);
-  if (!list.length) { toast('没有识别到文件'); return; }
+  if (!list.length) {
+    toast('没有读取到文件；若系统选择器只允许单选，请重新打开「相册（可多选）」后长按/勾选多张', 5200);
+    return;
+  }
   if (editorFormat !== 'markdown') {
     toast('请先将正文格式切换为 Markdown，再插入媒体', 4200);
     return;
   }
   const added = [];
   const failures = [];
+  toast(`正在处理 ${list.length} 个文件…`, 1800);
   for (const file of list) {
     try {
       added.push(await prepareMediaFile(file));
@@ -441,7 +445,10 @@ async function addMediaFiles(files) {
     const kinds = added.reduce((acc, m) => { acc[m.kind] = (acc[m.kind] || 0) + 1; return acc; }, {});
     toast(`已插入 ${Object.entries(kinds).map(([k, n]) => `${n} 个${mediaKindLabel(k)}`).join('、')}到光标处`);
   }
-  if (failures.length) toast(`部分文件失败：${failures[0]}`, 5200);
+  if (failures.length) {
+    console.error('[editor] 媒体处理失败:', failures);
+    toast(`部分文件失败：${failures.slice(0, 2).join('；')}`, 6200);
+  }
 }
 
 function insertMediaAtCursor(index) {
@@ -1254,21 +1261,23 @@ bindLongPress(els.photoCameraBtn,
 els.photoGalleryBtn.addEventListener('click', () => els.photoGalleryInput.click());
 if (els.mediaFileBtn) els.mediaFileBtn.addEventListener('click', () => els.mediaFileInput.click());
 if (els.audioRecordBtn) els.audioRecordBtn.addEventListener('click', toggleAudioRecording);
+function consumeInputFiles(input) {
+  const files = Array.from(input.files || []);
+  // 先清空 input，再异步处理：部分移动浏览器在切后台/文件选择器关闭后会清空 FileList。
+  input.value = '';
+  return files;
+}
 els.photoCameraInput.addEventListener('change', async () => {
-  await addMediaFiles(els.photoCameraInput.files);
-  els.photoCameraInput.value = '';
+  await addMediaFiles(consumeInputFiles(els.photoCameraInput));
 });
 els.photoVideoInput.addEventListener('change', async () => {
-  await addMediaFiles(els.photoVideoInput.files);
-  els.photoVideoInput.value = '';
+  await addMediaFiles(consumeInputFiles(els.photoVideoInput));
 });
 els.photoGalleryInput.addEventListener('change', async () => {
-  await addMediaFiles(els.photoGalleryInput.files);
-  els.photoGalleryInput.value = '';
+  await addMediaFiles(consumeInputFiles(els.photoGalleryInput));
 });
 els.mediaFileInput.addEventListener('change', async () => {
-  await addMediaFiles(els.mediaFileInput.files);
-  els.mediaFileInput.value = '';
+  await addMediaFiles(consumeInputFiles(els.mediaFileInput));
 });
 els.photoStrip.addEventListener('click', (e) => {
   const removeBtn = e.target.closest('[data-media-remove]');

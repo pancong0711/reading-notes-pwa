@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#c9a96e">
   <title>编辑笔记 · 读书笔记</title>
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20261107d">
+  <link rel="stylesheet" href="styles.css?v=20261107e">
   <script src="reading-font.js"></script>
 </head>
 <body class="editor-body">
@@ -40,20 +40,20 @@
           <h2 id="photo-section-title">图片 / 多媒体</h2>
           <span class="muted">图片/音视频/文档均可多选；HEIC 自动转 JPEG</span>
         </div>
-        <input type="file" id="photo-input-camera" accept="image/*,image/heic,image/heif" capture="environment" multiple hidden>
+        <input type="file" id="photo-input-camera" accept="image/*,.heic,.heif" capture="environment" multiple hidden>
         <input type="file" id="photo-input-video" accept="video/*" capture="environment" multiple hidden>
-        <input type="file" id="photo-input-gallery" accept="image/*,image/heic,image/heif,video/*,audio/*" multiple hidden>
+        <input type="file" id="photo-input-gallery" accept="image/*,.heic,.heif" multiple hidden>
         <!-- 关键：不带 accept，打开系统完整文件浏览器，覆盖所有本机文件夹；代码按 MIME 分流 -->
         <input type="file" id="media-input-file" multiple hidden>
         <div class="photo-source-buttons">
-          <button class="btn ghost" id="photo-camera-btn" type="button" title="单击拍照；长按录像">📷 拍照 / 长按录像</button>
+          <button class="btn ghost" id="photo-camera-btn" type="button" title="单击拍照（每次一张）；长按录像；多选请用相册">📷 拍照（单张）/ 长按录像</button>
           <button class="btn ghost" id="photo-gallery-btn" type="button">🖼 相册（可多选）</button>
           <button class="btn ghost" id="audio-record-btn" type="button">🎙 录音</button>
           <button class="btn ghost" id="media-file-btn" type="button">📂 本机文件（可多选）</button>
         </div>
         <p class="field-hint audio-record-status" id="audio-record-status" hidden></p>
         <div class="photo-strip" id="photo-strip"></div>
-        <p class="field-hint" id="photo-hint">支持一次选择多个媒体/附件；图片压缩、HEIC 自动转 JPEG，音频/视频/文档按原文件保存。</p>
+        <p class="field-hint" id="photo-hint">相册/本机文件支持多选；系统相机每次拍照一张，可连续点按。图片压缩、HEIC 自动转 JPEG。</p>
       </section>
 
       <label class="field editor-title-field">标题
@@ -200,6 +200,6 @@
   <script src="sw-register.js"></script>
   <script src="panel-modal.js"></script>
   <script src="types.js"></script>
-  <script type="module" src="editor.js?v=20261107d"></script>
+  <script type="module" src="editor.js?v=20261107e"></script>
 </body>
 </html>
