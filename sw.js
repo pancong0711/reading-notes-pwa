@@ -9,7 +9,7 @@
 'use strict';
 
 /* 版本号常量：资源有更新时递增，如 'reading-notes-v2' */
-var CACHE_NAME = 'reading-notes-v48';   // v48: 20261107 多媒体多选 + HEIC/HEIF 本地转 JPEG（含 v47 全量）
+var CACHE_NAME = 'reading-notes-v49';   // v49: 20261108 修复移动端相册多选退化/FileList 清空（含 v48 全量）
 
 /* 安装时预缓存的核心资源（相对路径，与页面同目录） */
 var CORE_ASSETS = [
